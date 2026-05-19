@@ -1,0 +1,143 @@
+<div class="bg-white p-8 shadow-md border border-gray-300 w-full max-w-[900px] mx-auto text-black" style="font-family: Tahoma, sans-serif; font-size: 9pt;">
+  <div class="text-xl font-bold text-gray-800 border-b-2 border-gray-800 pb-2 mb-4 tracking-widest uppercase">{{ translate('invoiceTitle') }}</div>
+
+  <div class="grid grid-cols-2 gap-4 mb-6">
+    <section>
+      <b class="text-gray-500 text-[10px] uppercase tracking-wider block mb-1">{{ translate('buyer') }}:</b>
+      <input v-model="customDbForm.buyer.name" class="invoice-input w-full font-bold text-[10pt]" :placeholder="translate('buyerName')" />
+      <input v-model="customDbForm.buyer.address" class="invoice-input w-full mt-1" :placeholder="translate('buyerAddress')" />
+    </section>
+
+    <section class="border-l border-gray-200 pl-4">
+      <b class="text-rose-600 text-[10px] uppercase tracking-wider block mb-1">{{ translate('seller') }}:</b>
+      <input v-model="customDbForm.counterparty.name" class="invoice-input w-full font-bold text-[10pt]" :placeholder="translate('sellerName')" />
+      <div class="flex items-center gap-1 mt-1">
+        <span class="text-gray-500 text-xs">Reg:</span>
+        <input v-model="customDbForm.counterparty.reg_num" class="invoice-input w-20 text-xs" />
+        <span class="text-gray-500 text-xs ml-2">KM/VAT:</span>
+        <input v-model="customDbForm.counterparty.vat_num" class="invoice-input w-28 text-xs" />
+      </div>
+      <input v-model="customDbForm.counterparty.address" class="invoice-input w-full mt-1 text-xs" :placeholder="translate('sellerAddress')" />
+
+      <div v-if="schemaHas('counterparty.bank') || schemaHas('counterparty.iban')" class="mt-1 flex items-center gap-1 text-xs">
+        <span class="text-gray-500 w-12">{{ translate('bank1') }}:</span>
+        <input v-if="schemaHas('counterparty.bank')" v-model="customDbForm.counterparty.bank" class="invoice-input w-20" />
+        <input v-if="schemaHas('counterparty.iban')" v-model="customDbForm.counterparty.iban" class="invoice-input flex-1" />
+      </div>
+      <div v-if="schemaHas('counterparty.bank2') || schemaHas('counterparty.iban2')" class="mt-1 flex items-center gap-1 text-xs">
+        <span class="text-gray-500 w-12">{{ translate('bank2') }}:</span>
+        <input v-if="schemaHas('counterparty.bank2')" v-model="customDbForm.counterparty.bank2" class="invoice-input w-20" />
+        <input v-if="schemaHas('counterparty.iban2')" v-model="customDbForm.counterparty.iban2" class="invoice-input flex-1" />
+      </div>
+    </section>
+  </div>
+
+  <div class="grid grid-cols-[160px_1fr_150px_1fr] gap-x-3 gap-y-2 items-center mb-6 bg-gray-50 border border-gray-200 p-3">
+    <label class="text-gray-500 text-xs text-right">{{ translate('docNum') }}</label>
+    <input v-model="customDbForm.doc_num" class="invoice-input font-bold w-32 text-[10pt]" />
+    <label class="text-gray-500 text-xs text-right">{{ translate('refNum') }}</label>
+    <input v-model="customDbForm.ref_num" class="invoice-input font-bold w-32 text-[10pt]" />
+    <label class="text-gray-500 text-xs text-right">{{ translate('docDate') }}</label>
+    <input v-model="customDbForm.doc_date" type="date" class="invoice-input font-bold w-32" />
+    <label class="text-gray-500 text-xs text-right">{{ translate('dueDate') }}</label>
+    <input v-model="customDbForm.due_date" type="date" class="invoice-input font-bold w-32" />
+  </div>
+
+  <table width="100%" cellpadding="4" cellspacing="0" style="border: 1px solid black;" border="0" class="mb-2">
+    <tr class="font-bold border-b border-black bg-gray-100 text-[8pt]">
+      <td width="22%">{{ translate('lineTitle') }}</td>
+      <td width="10%">{{ translate('code') }}</td>
+      <td width="8%" align="center">{{ translate('unit') }}</td>
+      <td width="8%" align="right">{{ translate('qty') }}</td>
+      <td width="10%" align="right">{{ translate('price') }}</td>
+      <td width="10%" align="right">{{ translate('itemSum') }}</td>
+      <td width="10%" align="right" class="text-blue-700">VAT/KM</td>
+      <td width="12%" align="right" class="text-green-700">{{ translate('total') }}</td>
+      <td width="5%"></td>
+    </tr>
+    <tr v-for="(itm, i) in customDbForm.items" :key="i" class="border-b border-gray-200 group text-[8pt]">
+      <td valign="top">
+        <input v-model="itm.title" class="invoice-input w-full font-bold mb-1" />
+        <input v-model="itm.description" class="invoice-input w-full text-[7pt] italic text-gray-500" />
+      </td>
+      <td valign="top" class="pt-2"><input v-model="itm.code" class="invoice-input w-full" /></td>
+      <td valign="top" align="center" class="pt-2"><input v-model="itm.unit" class="invoice-input w-full text-center" /></td>
+      <td valign="top" align="right" class="pt-2"><input v-model.number="itm.amount" type="number" step="0.001" class="invoice-input w-full text-right" /></td>
+      <td valign="top" align="right" class="pt-2"><input v-model.number="itm.item_price" type="number" step="0.01" class="invoice-input w-full text-right" /></td>
+      <td valign="top" align="right" class="pt-2"><input v-model.number="itm.item_sum" type="number" step="0.01" class="invoice-input w-full text-right font-bold" /></td>
+      <td valign="top" align="right" class="pt-2"><input v-model.number="itm.vat_sum" type="number" step="0.01" class="invoice-input w-full text-right text-blue-700" /></td>
+      <td valign="top" align="right" class="pt-2"><input v-model.number="itm.total_sum" type="number" step="0.01" class="invoice-input w-full text-right text-green-700 font-bold" /></td>
+      <td valign="top" align="center" class="pt-2">
+        <button @click="customDbForm.items.splice(i, 1)" class="text-red-500 hover:text-red-700 font-bold">x</button>
+      </td>
+    </tr>
+  </table>
+
+  <button @click="addCustomDbItem" class="text-blue-600 text-xs font-bold mb-6 hover:underline">+ {{ translate('addLineItem') }}</button>
+
+  <div class="grid grid-cols-2 gap-4">
+    <section class="border-r border-gray-200 pr-4">
+      <label class="block text-[8pt] text-gray-500 mb-1">{{ translate('description') }}:</label>
+      <input v-model="customDbForm.description" class="invoice-input w-full mb-4 font-bold" />
+      <label class="block text-[8pt] text-gray-500 mb-1 mt-4">{{ translate('sourceFile') }}:</label>
+      <input v-model="customDbForm.src_path" class="invoice-input w-full text-gray-500 font-mono text-xs bg-gray-50 p-1" readonly />
+    </section>
+
+    <section class="grid grid-cols-[1fr_100px] gap-x-2 gap-y-2 items-end">
+      <label class="text-right text-gray-600 text-[8pt]">{{ translate('itemsSum') }}:</label>
+      <input v-model.number="customDbForm.items_sum" type="number" step="0.01" class="invoice-input w-full text-right font-bold" />
+      <label class="text-right text-gray-600 text-[8pt]">VAT/KM <input v-model.number="customDbForm.vat_rate" type="number" class="invoice-input w-8 border-b text-center" />%:</label>
+      <input v-model.number="customDbForm.vat_sum" type="number" step="0.01" class="invoice-input w-full text-right font-bold" />
+      <label class="text-right text-gray-600 text-[8pt]">{{ translate('round') }}:</label>
+      <input v-model.number="customDbForm.round_sum" type="number" step="0.01" class="invoice-input w-full text-right" />
+      <label class="text-right text-[9pt] text-rose-800 pt-2 font-bold">{{ translate('totalEur') }}:</label>
+      <input v-model.number="customDbForm.total_sum" type="number" step="0.01" class="invoice-input w-full text-right text-[12pt] text-rose-700 font-bold" />
+    </section>
+  </div>
+
+  <div v-if="additionalItemFields.length" class="mt-6 border-t border-gray-200 pt-4">
+    <h3 class="text-[9pt] font-bold uppercase tracking-wider text-gray-600 mb-2">{{ translate('additionalItemFields') }}</h3>
+    <div v-for="(itm, i) in customDbForm.items" :key="'extra-item-' + i" class="mb-3 p-2 bg-gray-50 border border-gray-200">
+      <div class="text-[8pt] font-bold text-gray-500 mb-2">{{ translate('line') }} {{ i + 1 }}</div>
+      <div class="grid grid-cols-2 gap-x-4 gap-y-2">
+        <label v-for="field in additionalItemFields" :key="field.path" class="text-[8pt] text-gray-500">
+          {{ field.label }}
+          <input v-model="itm[field.path]" :type="field.inputType" class="invoice-input w-full text-black" />
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="additionalBuyerFields.length || additionalCounterpartyFields.length || additionalRootFields.length || additionalObjectGroups.length" class="mt-6 border-t border-gray-200 pt-4">
+    <h3 class="text-[9pt] font-bold uppercase tracking-wider text-gray-600 mb-3">{{ translate('additionalCustomDbFields') }}</h3>
+    <div class="grid grid-cols-2 gap-4">
+      <div v-if="additionalBuyerFields.length">
+        <h4 class="text-[8pt] font-bold text-gray-500 mb-2">{{ translate('buyerShort') }}</h4>
+        <label v-for="field in additionalBuyerFields" :key="'buyer-' + field.path" class="block text-[8pt] text-gray-500 mb-2">
+          {{ field.label }}
+          <input v-model="customDbForm.buyer[field.path]" :type="field.inputType" class="invoice-input w-full text-black" />
+        </label>
+      </div>
+      <div v-if="additionalCounterpartyFields.length">
+        <h4 class="text-[8pt] font-bold text-gray-500 mb-2">{{ translate('sellerShort') }}</h4>
+        <label v-for="field in additionalCounterpartyFields" :key="'counterparty-' + field.path" class="block text-[8pt] text-gray-500 mb-2">
+          {{ field.label }}
+          <input v-model="customDbForm.counterparty[field.path]" :type="field.inputType" class="invoice-input w-full text-black" />
+        </label>
+      </div>
+      <div v-for="field in additionalRootFields" :key="'root-' + field.path">
+        <label class="block text-[8pt] text-gray-500 mb-2">
+          {{ field.label }}
+          <input v-model="customDbForm[field.path]" :type="field.inputType" class="invoice-input w-full text-black" />
+        </label>
+      </div>
+      <div v-for="group in additionalObjectGroups" :key="'group-' + group.path">
+        <h4 class="text-[8pt] font-bold text-gray-500 mb-2">{{ group.label }}</h4>
+        <label v-for="field in group.fields" :key="group.path + '-' + field.path" class="block text-[8pt] text-gray-500 mb-2">
+          {{ field.label }}
+          <input v-model="customDbForm[group.path][field.path]" :type="field.inputType" class="invoice-input w-full text-black" />
+        </label>
+      </div>
+    </div>
+  </div>
+</div>

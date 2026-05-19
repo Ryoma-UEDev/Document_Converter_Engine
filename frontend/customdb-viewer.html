@@ -1,0 +1,272 @@
+<!-- START OF STRICT VERTICAL LIST TEMPLATE -->
+<div class="w-full max-w-3xl mx-auto p-6 bg-white shadow-sm border border-gray-200 rounded-lg text-gray-800 font-sans text-sm space-y-6">
+
+  <!-- Header -->
+  <div class="border-b-2 border-gray-800 pb-3 mb-6">
+    <h2 class="text-2xl font-bold uppercase tracking-widest">{{ translate('invoiceTitle') }}</h2>
+  </div>
+
+  <!-- 1. DOCUMENT DATA -->
+  <section class="flex flex-col gap-4 p-5 bg-gray-50 border border-gray-200 rounded">
+    <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wider border-b border-gray-300 pb-2">1. Document Data</h3>
+    
+    <label class="block">
+      <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('docNum') }}</span>
+      <input v-model="customDbForm.doc_num" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none font-bold" />
+    </label>
+
+    <label class="block">
+      <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('refNum') }}</span>
+      <input v-model="customDbForm.ref_num" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none font-bold" />
+    </label>
+
+    <div class="flex gap-4">
+      <label class="block flex-1">
+        <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('docDate') }}</span>
+        <input v-model="customDbForm.doc_date" type="date" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+      </label>
+      <label class="block flex-1">
+        <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('dueDate') }}</span>
+        <input v-model="customDbForm.due_date" type="date" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+      </label>
+    </div>
+
+    <label class="block">
+      <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('description') }}</span>
+      <input v-model="customDbForm.description" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+    </label>
+  </section>
+
+  <!-- 2. BUYER -->
+  <section class="flex flex-col gap-4 p-5 border border-blue-200 bg-blue-50/30 rounded">
+    <h3 class="text-sm font-bold text-blue-800 uppercase tracking-wider border-b border-blue-200 pb-2">2. {{ translate('buyer') }}</h3>
+    
+    <label class="block">
+      <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('buyerName') || 'Name' }}</span>
+      <input v-model="customDbForm.buyer.name" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none font-bold" />
+    </label>
+    
+    <label class="block">
+      <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('buyerAddress') || 'Address' }}</span>
+      <input v-model="customDbForm.buyer.address" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+    </label>
+  </section>
+
+  <!-- 3. SELLER -->
+  <section class="flex flex-col gap-4 p-5 border border-rose-200 bg-rose-50/30 rounded">
+    <h3 class="text-sm font-bold text-rose-800 uppercase tracking-wider border-b border-rose-200 pb-2">3. {{ translate('seller') }}</h3>
+    
+    <label class="block">
+      <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('sellerName') || 'Name' }}</span>
+      <input v-model="customDbForm.counterparty.name" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none font-bold" />
+    </label>
+
+    <div class="flex gap-4">
+      <label class="block flex-1">
+        <span class="text-[10px] font-bold text-gray-500 uppercase">Reg Num</span>
+        <input v-model="customDbForm.counterparty.reg_num" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+      </label>
+      <label class="block flex-1">
+        <span class="text-[10px] font-bold text-gray-500 uppercase">KM/VAT</span>
+        <input v-model="customDbForm.counterparty.vat_num" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+      </label>
+    </div>
+
+    <label class="block">
+      <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('sellerAddress') || 'Address' }}</span>
+      <input v-model="customDbForm.counterparty.address" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+    </label>
+
+    <!-- Banks -->
+    <div v-if="schemaHas('counterparty.bank') || schemaHas('counterparty.iban')" class="flex gap-4">
+      <label v-if="schemaHas('counterparty.bank')" class="block w-1/3">
+        <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('bank1') }}</span>
+        <input v-model="customDbForm.counterparty.bank" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+      </label>
+      <label v-if="schemaHas('counterparty.iban')" class="block flex-1">
+        <span class="text-[10px] font-bold text-gray-500 uppercase">IBAN 1</span>
+        <input v-model="customDbForm.counterparty.iban" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+      </label>
+    </div>
+
+    <div v-if="schemaHas('counterparty.bank2') || schemaHas('counterparty.iban2')" class="flex gap-4">
+      <label v-if="schemaHas('counterparty.bank2')" class="block w-1/3">
+        <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('bank2') }}</span>
+        <input v-model="customDbForm.counterparty.bank2" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+      </label>
+      <label v-if="schemaHas('counterparty.iban2')" class="block flex-1">
+        <span class="text-[10px] font-bold text-gray-500 uppercase">IBAN 2</span>
+        <input v-model="customDbForm.counterparty.iban2" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+      </label>
+    </div>
+  </section>
+
+  <!-- 4. ITEMS -->
+  <section class="flex flex-col gap-4 border border-gray-200 rounded p-5">
+    <div class="flex justify-between items-center border-b border-gray-300 pb-2">
+      <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wider">4. Items</h3>
+      <button @click="addCustomDbItem" class="text-xs font-bold text-blue-600 hover:text-blue-800 bg-gray-50 px-2 py-1 border rounded shadow-sm">+ {{ translate('addLineItem') }}</button>
+    </div>
+
+    <div v-if="customDbForm.items.length === 0" class="text-center py-6 text-gray-400 italic border-2 border-dashed rounded">
+      No items added.
+    </div>
+
+    <div v-for="(itm, i) in customDbForm.items" :key="i" class="relative border border-gray-300 bg-gray-50 p-4 rounded shadow-sm flex flex-col gap-3">
+      <div class="flex justify-between items-center border-b border-gray-200 pb-2">
+        <span class="text-xs font-bold text-gray-500">ITEM #{{ i + 1 }}</span>
+        <button @click="customDbForm.items.splice(i, 1)" class="text-red-500 hover:text-red-700 font-bold px-2">✕ Remove</button>
+      </div>
+
+      <label class="block">
+        <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('lineTitle') }}</span>
+        <input v-model="itm.title" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none font-bold" />
+      </label>
+      
+      <label class="block">
+        <span class="text-[10px] font-bold text-gray-500 uppercase">Description</span>
+        <input v-model="itm.description" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none text-xs" />
+      </label>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <label class="block">
+          <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('code') }}</span>
+          <input v-model="itm.code" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+        </label>
+        
+        <!-- Unit is now before Qty -->
+        <label class="block">
+          <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('unit') }}</span>
+          <input v-model="itm.unit" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none text-center" />
+        </label>
+
+        <label class="block">
+          <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('qty') }}</span>
+          <input v-model.number="itm.amount" type="number" step="any" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+        </label>
+        
+        <label class="block">
+          <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('price') }}</span>
+          <input v-model.number="itm.item_price" type="number" step="any" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+        </label>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-3 border rounded mt-2">
+        <label class="block">
+          <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('itemSum') }}</span>
+          <input v-model.number="itm.item_sum" type="number" step="any" class="w-full border border-gray-300 rounded p-2 mt-1 outline-none" />
+        </label>
+        <label class="block">
+          <span class="text-[10px] font-bold text-blue-500 uppercase">VAT/KM</span>
+          <input v-model.number="itm.vat_sum" type="number" step="any" class="w-full border border-gray-300 rounded p-2 mt-1 outline-none text-blue-700" />
+        </label>
+        <label class="block">
+          <span class="text-[10px] font-bold text-green-600 uppercase">{{ translate('total') }}</span>
+          <input v-model.number="itm.total_sum" type="number" step="any" class="w-full border border-gray-300 rounded p-2 mt-1 outline-none text-green-700 font-bold" />
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. SUMMARY / TOTALS -->
+  <section class="flex flex-col gap-4 p-5 bg-gray-100 border border-gray-300 rounded shadow-inner">
+    <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider border-b border-gray-300 pb-2">5. Summary / Totals</h3>
+    
+    <label class="flex justify-between items-center">
+      <span class="text-xs font-bold text-gray-600 uppercase">{{ translate('itemsSum') }}</span>
+      <input v-model.number="customDbForm.items_sum" type="number" step="any" class="w-1/3 border border-gray-300 rounded p-2 text-right outline-none font-medium" />
+    </label>
+
+    <div class="flex justify-between items-center">
+      <label class="flex items-center gap-2 text-xs font-bold text-gray-600 uppercase">
+        VAT/KM Rate
+        <input v-model.number="customDbForm.vat_rate" type="number" step="any" class="w-16 border border-gray-300 rounded p-1 text-center outline-none" />%
+      </label>
+      <input v-model.number="customDbForm.vat_sum" type="number" step="any" class="w-1/3 border border-gray-300 rounded p-2 text-right outline-none font-medium" />
+    </div>
+
+    <label class="flex justify-between items-center">
+      <span class="text-xs font-bold text-gray-600 uppercase">{{ translate('round') }}</span>
+      <input v-model.number="customDbForm.round_sum" type="number" step="any" class="w-1/3 border border-gray-300 rounded p-2 text-right outline-none font-medium" />
+    </label>
+
+    <hr class="border-gray-300 my-2">
+
+    <label class="flex justify-between items-center">
+      <span class="text-base font-bold text-rose-800 uppercase">{{ translate('totalEur') }}</span>
+      <input v-model.number="customDbForm.total_sum" type="number" step="any" class="w-1/2 border-2 border-rose-400 bg-white rounded p-3 text-right text-xl text-rose-700 font-bold outline-none" />
+    </label>
+  </section>
+
+  <!-- 6. ADDITIONAL CUSTOM DB FIELDS (Undefined fields grouped at the bottom) -->
+  <section v-if="additionalBuyerFields.length || additionalCounterpartyFields.length || additionalItemFields.length || additionalRootFields.length || additionalObjectGroups.length" class="flex flex-col gap-4 p-5 border border-dashed border-gray-400 rounded bg-white">
+    <h3 class="text-sm font-bold text-gray-600 uppercase tracking-wider border-b border-gray-300 pb-2">
+      6. {{ translate('additionalCustomDbFields') || 'Additional Data' }}
+    </h3>
+    
+    <!-- Additional Buyer Fields -->
+    <div v-if="additionalBuyerFields.length" class="bg-blue-50/50 p-4 border border-blue-200 rounded">
+      <h4 class="text-xs font-bold text-blue-800 uppercase mb-3">{{ translate('buyerShort') || 'Buyer Extras' }}</h4>
+      <div class="flex flex-col gap-3">
+        <label v-for="field in additionalBuyerFields" :key="'buyer-' + field.path" class="block">
+          <span class="text-[10px] font-bold text-gray-500 uppercase">{{ field.label }}</span>
+          <input v-model="customDbForm.buyer[field.path]" :type="field.inputType" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+        </label>
+      </div>
+    </div>
+
+    <!-- Additional Seller Fields -->
+    <div v-if="additionalCounterpartyFields.length" class="bg-rose-50/50 p-4 border border-rose-200 rounded">
+      <h4 class="text-xs font-bold text-rose-800 uppercase mb-3">{{ translate('sellerShort') || 'Seller Extras' }}</h4>
+      <div class="flex flex-col gap-3">
+        <label v-for="field in additionalCounterpartyFields" :key="'counterparty-' + field.path" class="block">
+          <span class="text-[10px] font-bold text-gray-500 uppercase">{{ field.label }}</span>
+          <input v-model="customDbForm.counterparty[field.path]" :type="field.inputType" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+        </label>
+      </div>
+    </div>
+
+    <!-- Additional Item Fields -->
+    <div v-if="additionalItemFields.length" class="bg-gray-50 p-4 border border-gray-300 rounded">
+      <h4 class="text-xs font-bold text-gray-700 uppercase mb-3">{{ translate('additionalItemFields') || 'Item Extras' }}</h4>
+      <div v-for="(itm, i) in customDbForm.items" :key="'extra-item-' + i" class="mb-4 last:mb-0 border-b border-dashed border-gray-300 last:border-0 pb-4 last:pb-0">
+        <div class="text-[10px] font-bold text-gray-500 mb-2 uppercase">{{ translate('line') || 'Item' }} #{{ i + 1 }}</div>
+        <div class="flex flex-col gap-3">
+          <label v-for="field in additionalItemFields" :key="field.path" class="block">
+            <span class="text-[10px] font-bold text-gray-500 uppercase">{{ field.label }}</span>
+            <input v-model="itm[field.path]" :type="field.inputType" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Additional Root Fields -->
+    <div v-if="additionalRootFields.length" class="flex flex-col gap-3">
+      <label v-for="field in additionalRootFields" :key="'root-' + field.path" class="block">
+        <span class="text-[10px] font-bold text-gray-500 uppercase">{{ field.label }}</span>
+        <input v-model="customDbForm[field.path]" :type="field.inputType" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+      </label>
+    </div>
+
+    <!-- Additional Object Groups -->
+    <div v-for="group in additionalObjectGroups" :key="'group-' + group.path" class="bg-gray-50 p-4 border border-gray-300 rounded">
+      <h4 class="text-xs font-bold text-gray-700 uppercase mb-3">{{ group.label }}</h4>
+      <div class="flex flex-col gap-3">
+        <label v-for="field in group.fields" :key="group.path + '-' + field.path" class="block">
+          <span class="text-[10px] font-bold text-gray-500 uppercase">{{ field.label }}</span>
+          <input v-model="customDbForm[group.path][field.path]" :type="field.inputType" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. DOCUMENT SOURCE -->
+  <section class="flex flex-col gap-2 pt-6">
+    <label class="block">
+      <span class="text-[10px] font-bold text-gray-400 uppercase">{{ translate('sourceFile') }}</span>
+      <input v-model="customDbForm.src_path" class="w-full border-none bg-transparent p-0 mt-1 text-gray-400 font-mono text-xs outline-none" readonly placeholder="No file attached" />
+    </label>
+  </section>
+
+</div>
+<!-- END OF STRICT VERTICAL LIST TEMPLATE -->

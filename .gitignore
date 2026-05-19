@@ -1,0 +1,41 @@
+# Local Python environment and generated files
+.venv/
+venv/
+.standalone/
+Reference/
+__pycache__/
+*.py[cod]
+*$py.class
+earve_settings.json
+.env
+.env.*
+!.env.example
+*.local.json
+
+# Local invoice/document data
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.tif
+*.tiff
+*.xls
+*.xlsx
+
+# Archives and exported bundles
+*.zip
+*.rar
+*.7z
+
+# Temporary logs/databases
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

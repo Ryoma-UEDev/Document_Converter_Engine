@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Data Extractor (Split)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+    <style>
+        [v-cloak] { display: none; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3b82f6; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .viewer-container { cursor: grab; user-select: none; background-color: #e5e7eb; background-image: linear-gradient(45deg, #d1d5db 25%, transparent 25%), linear-gradient(-45deg, #d1d5db 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #d1d5db 75%), linear-gradient(-45deg, transparent 75%, #d1d5db 75%); background-size: 20px 20px; background-position: 0 0, 0 10px, 10px -10px, -10px 0px; }
+        .viewer-container:active { cursor: grabbing; }
+        .viewer-container img { pointer-events: none; -webkit-user-drag: none; }
+        .invoice-input { background: transparent; border: none; border-bottom: 1px solid transparent; outline: none; transition: border-color 0.2s, background-color 0.2s; }
+        .invoice-input:hover { border-bottom: 1px dashed #9ca3af; background-color: #fefce8; }
+        .invoice-input:focus { border-bottom: 1px solid #3b82f6; background-color: #eff6ff; }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col text-sm">
+<div id="app" v-cloak class="flex flex-col h-full">
+<header class="bg-white shadow px-6 py-4 flex justify-between items-center z-10">
+    <div>
+        <h1 class="text-xl font-bold text-gray-800">{{ t('appTitle') }} <span class="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded ml-2 font-mono">v1.2</span></h1>
+        <p class="text-gray-500 text-xs mt-1">{{ t('appSubtitle') }}</p>
+    </div>
+    <div class="flex items-center gap-2">
+        <div class="flex border rounded overflow-hidden text-xs font-bold">
+            <button @click="uiLang = 'en'" :class="uiLang === 'en' ? 'bg-gray-800 text-white' : 'bg-white text-gray-600'" class="px-3 py-2">EN</button>
+            <button @click="uiLang = 'et_ru'" :class="uiLang === 'et_ru' ? 'bg-gray-800 text-white' : 'bg-white text-gray-600'" class="px-3 py-2">ET/RU</button>
+        </div>
+        <button @click="showSettings = true" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded shadow transition font-medium">{{ t('settings') }}</button>
+    </div>
+</header>
+
+<main class="flex-1 flex overflow-hidden">
+<div class="w-1/2 p-6 flex flex-col border-r bg-gray-50 overflow-y-auto">
+    <div class="mb-3 text-xs text-gray-500">Backend: <span class="font-mono">{{ backendBase }}</span></div>
+    <div class="border-2 border-dashed border-gray-400 rounded-lg p-8 text-center bg-white cursor-pointer hover:bg-gray-50 transition" @dragover.prevent @drop.prevent="handleDrop" @click="$refs.fileInput.click()" v-if="!filePreview">
+        <input type="file" ref="fileInput" @change="handleFileSelect" accept="image/jpeg, image/png, image/webp, application/pdf" class="hidden">
+        <div class="text-4xl mb-3">{{ t('document') }}</div>
+        <p class="font-medium text-gray-700">{{ t('dropDocument') }}</p>
+    </div>
+
+    <div v-if="filePreview" class="flex flex-col h-full">
+        <div class="flex justify-between items-center mb-2">
+            <span class="font-medium truncate">{{ fileName }}</span>
+            <button @click="clearFile" class="text-red-500 hover:text-red-700 text-xs font-bold bg-red-50 px-2 py-1 rounded border border-red-200">{{ t('remove') }}</button>
+        </div>
+
+        <div class="flex-1 border relative overflow-hidden rounded flex items-center justify-center viewer-container" @wheel.prevent="handleWheel" @mousedown.prevent="startDrag" @mousemove.prevent="onDrag" @mouseup="endDrag" @mouseleave="endDrag">
+            <img :src="filePreview" :style="{ transform: `translate(${panX}px, ${panY}px) scale(${zoomLevel})`, transition: isDragging ? 'none' : 'transform 0.1s' }" class="max-w-full max-h-full object-contain shadow-lg" />
+            <div class="absolute bottom-3 right-3 flex bg-white rounded shadow-md border text-gray-700 font-bold overflow-hidden select-none">
+                <button @click="zoomOut" class="px-3 py-1.5 hover:bg-gray-100 border-r transition-colors">-</button>
+                <button @click="resetZoom" class="px-3 py-1.5 hover:bg-gray-100 border-r transition-colors text-xs">{{ t('reset') }}</button>
+                <button @click="zoomIn" class="px-3 py-1.5 hover:bg-gray-100 transition-colors">+</button>
+            </div>
+        </div>
+
+        <button @click="extractData" :disabled="isProcessing" class="mt-4 w-full py-3 text-white font-bold rounded shadow disabled:opacity-50 transition flex justify-center items-center gap-2" :class="extractBtnClass">
+            <span v-if="isProcessing" class="loader !w-5 !h-5 !border-2"></span>
+            {{ isProcessing ? (ocrStatus || t('processing')) : t('extractData') + ' (' + extractBtnLabel + ')' }}
+        </button>
+        <div v-if="errorMsg" class="mt-3 border border-red-300 bg-red-50 p-3 rounded">
+          <p class="text-red-800 font-bold text-sm mb-1">{{ t('error') }}</p>
+          <p class="text-red-700 text-xs whitespace-pre-wrap">{{ errorMsg }}</p>
+        </div>
+
+        <div v-if="currentJob" class="mt-3 border rounded bg-white p-2">
+            <p class="text-xs font-semibold">{{ t('currentJob') }}: {{ currentJob.id }}</p>
+            <p class="text-xs text-gray-600">{{ currentJob.stage }} ({{ currentJob.progress }}%)</p>
+            <div class="w-full bg-gray-200 h-2 rounded mt-1"><div class="bg-blue-600 h-2 rounded" :style="{width: currentJob.progress + '%'}"></div></div>
+        </div>
+    </div>
+
+    <div class="mt-4 bg-white border rounded p-3">
+      <div class="flex justify-between items-center mb-2">
+        <h3 class="font-bold">{{ t('jobMonitor') }}</h3>
+        <button @click="refreshJobs" class="text-xs px-2 py-1 border rounded">{{ t('refresh') }}</button>
+      </div>
+      <div class="max-h-60 overflow-y-auto space-y-2">
+        <div v-for="j in jobs" :key="j.id" class="border rounded p-2 text-xs">
+          <div class="flex justify-between"><span class="font-semibold truncate">{{ j.file_name }}</span><span>{{ j.status }}</span></div>
+          <div>{{ j.stage }} ({{ j.progress }}%)</div>
+          <button v-if="j.status === 'completed'" @click="loadJobResult(j)" class="text-blue-600 underline mt-1">{{ t('loadResult') }}</button>
+        </div>
+      </div>
+    </div>
+</div>
+
+<div class="w-1/2 p-6 overflow-y-auto bg-gray-200 flex flex-col">
+    <div class="flex border-b border-gray-300 mb-6 bg-white shadow-sm p-2 rounded">
+        <button @click="activeTab = 'xml'" class="py-2 px-4 font-bold text-sm">{{ t('xmlMode') }}</button>
+        <button @click="activeTab = 'customdb'" class="py-2 px-4 font-bold text-sm">{{ t('customDbMode') }}</button>
+        <button @click="activeTab = 'dynamic'" class="py-2 px-4 font-bold text-sm">{{ t('dynamicMode') }}</button>
+    </div>
+
+    <div v-if="activeTab === 'xml'" class="bg-white p-4 rounded shadow-sm">
+      <div class="flex justify-between items-center mb-2">
+        <h2 class="font-bold">{{ t('xmlJson') }}</h2>
+        <button @click="downloadJson(xmlForm, 'xml.json')" class="px-3 py-1 bg-green-600 text-white rounded">{{ t('exportJson') }}</button>
+      </div>
+      <textarea v-model="xmlText" class="w-full h-[520px] border rounded p-2 font-mono text-xs"></textarea>
+    </div>
+
+    <div v-if="activeTab === 'customdb'">
+      <div class="flex justify-between items-center gap-3 mb-4">
+        <div>
+          <h2 class="text-lg font-bold text-gray-800">{{ t('visualPreview') }}</h2>
+          <p class="text-xs text-gray-500">{{ customDbViewerTemplateName }}</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <input ref="customDbTemplateFileInput" type="file" accept=".html,text/html" class="hidden" @change="handleCustomDbTemplateFile">
+          <button @click="$refs.customDbTemplateFileInput.click()" class="px-3 py-2 border rounded bg-white text-gray-700 font-medium text-xs">{{ t('openTemplate') }}</button>
+          <button @click="resetCustomDbViewerTemplate" class="px-3 py-2 border rounded bg-white text-gray-700 font-medium text-xs">{{ t('defaultTemplate') }}</button>
+          <button @click="exportCustomDb" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded shadow transition">{{ t('exportJson') }}</button>
+        </div>
+      </div>
+      <div v-if="customDbViewerError" class="mb-3 border border-red-300 bg-red-50 text-red-800 p-3 rounded text-xs whitespace-pre-wrap">{{ customDbViewerError }}</div>
+      <component
+        :is="customDbViewerComponent"
+        :key="customDbViewerTemplateName"
+        :custom-db-form="customDbForm"
+        :additional-item-fields="additionalItemFields"
+        :additional-buyer-fields="additionalBuyerFields"
+        :additional-counterparty-fields="additionalCounterpartyFields"
+        :additional-root-fields="additionalRootFields"
+        :additional-object-groups="additionalObjectGroups"
+        :schema-has="schemaHas"
+        :translate="t"
+        :add-custom-db-item="addCustomDbItem"
+      ></component>
+    </div>
+
+    <div v-if="activeTab === 'dynamic'" class="bg-white p-4 rounded shadow-sm">
+      <div class="flex justify-between items-center mb-2">
+        <h2 class="font-bold">{{ t('dynamicLines') }}</h2>
+        <div class="flex items-center gap-3">
+          <label class="flex items-center gap-2 text-xs text-gray-600">
+            <input v-model="dynamicFilterDuplicates" type="checkbox" class="h-4 w-4">
+            {{ t('filterDuplicates') }}
+          </label>
+          <button @click="downloadText(dynamicOutputText, 'dynamic.txt')" class="px-3 py-1 bg-purple-600 text-white rounded">{{ t('exportTxt') }}</button>
+        </div>
+      </div>
+      <textarea v-model="dynamicVisibleText" class="w-full h-[520px] border rounded p-2 font-mono text-xs"></textarea>
+    </div>
+</div>
+</main>
+
+<div v-if="showSettings" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+<div class="bg-white w-full max-w-2xl rounded-lg shadow-xl flex flex-col max-h-[90vh]">
+<div class="p-6 border-b flex justify-between items-center">
+    <h2 class="text-xl font-bold">{{ t('settingsTitle') }}</h2>
+    <button @click="showSettings = false" class="text-gray-400 hover:text-gray-700 font-bold">X</button>
+</div>
+<div class="px-6 pt-4 border-b bg-gray-50">
+    <div class="flex gap-2 text-sm font-bold">
+        <button @click="settingsTab = 'ai'" :class="settingsTabClass('ai')" class="px-3 py-2 rounded-t">AI/OCR</button>
+        <button @click="settingsTab = 'prompts'" :class="settingsTabClass('prompts')" class="px-3 py-2 rounded-t">{{ t('prompts') }}</button>
+        <button @click="settingsTab = 'schema'" :class="settingsTabClass('schema')" class="px-3 py-2 rounded-t">{{ t('customDbSchema') }}</button>
+        <button @click="settingsTab = 'mapping'" :class="settingsTabClass('mapping')" class="px-3 py-2 rounded-t">{{ t('mapping') }}</button>
+    </div>
+</div>
+<div class="p-6 overflow-y-auto flex-1">
+    <div v-if="settingsError" class="mb-4 border border-red-300 bg-red-50 text-red-800 p-3 rounded text-xs whitespace-pre-wrap">{{ settingsError }}</div>
+    <div v-if="settingsTab === 'ai'">
+        <div class="mb-4"><label class="block text-sm font-bold mb-1">Backend Base URL</label><input type="text" v-model="backendBase" class="w-full border p-2 rounded font-mono"></div>
+        <div class="mb-6">
+            <label class="block text-sm font-bold mb-1 text-gray-700">Primary AI Provider (The Brain)</label>
+            <select v-model="settings.provider" class="w-full border p-2 rounded bg-gray-50"><option value="openai">OpenAI-Compatible API</option><option value="lmstudio">LM Studio (Local Server)</option></select>
+        </div>
+        <div v-if="settings.provider === 'openai'" class="mb-6 p-4 border rounded bg-indigo-50">
+            <div class="mb-4"><label class="block text-sm font-bold mb-1">OpenAI-Compatible Base URL</label><input type="text" v-model="settings.openAiBaseUrl" class="w-full border p-2 rounded font-mono"></div>
+            <div class="mb-4"><label class="block text-sm font-bold mb-1">OpenAI-Compatible API Key</label><input type="password" v-model="settings.openAiKey" class="w-full border p-2 rounded font-mono"></div>
+            <div><label class="block text-sm font-bold mb-1">Select Model</label><div class="flex gap-2"><input v-if="!availableOpenAiModels.length" type="text" v-model="settings.openAiModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-else v-model="settings.openAiModel" class="flex-1 border p-2 rounded bg-white font-mono text-sm"><option v-if="settings.openAiModel && !modelListHas(availableOpenAiModels, settings.openAiModel)" :value="settings.openAiModel">{{ settings.openAiModel }}</option><option value="">Select probed model</option><option v-for="m in availableOpenAiModels" :key="m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeOpenAiModels" :disabled="isProbingModels" class="px-4 py-2 bg-indigo-600 text-white rounded">Probe</button></div></div>
+        </div>
+        <div v-if="settings.provider === 'lmstudio'" class="mb-6 p-4 border rounded bg-purple-50">
+            <div class="mb-4"><label class="block text-sm font-bold mb-1">Local Server URL</label><input type="text" v-model="settings.lmStudioUrl" class="w-full border p-2 rounded font-mono"></div>
+            <div><label class="block text-sm font-bold mb-1">Select LLM Model (Brain)</label><div class="flex gap-2"><input v-if="!availableLMStudioModels.length" type="text" v-model="settings.lmStudioModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-else v-model="settings.lmStudioModel" class="flex-1 border p-2 rounded bg-white font-mono text-sm"><option v-if="settings.lmStudioModel && !modelListHas(availableLMStudioModels, settings.lmStudioModel)" :value="settings.lmStudioModel">{{ settings.lmStudioModel }}</option><option value="">Select probed model</option><option v-for="m in availableLMStudioModels" :key="m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeLMStudioModels" :disabled="isProbingModels" class="px-4 py-2 bg-purple-600 text-white rounded">Probe</button></div></div>
+        </div>
+        <div class="mb-6 p-4 border rounded bg-gray-100">
+          <h3 class="font-bold text-gray-800 mb-2">OCR Pre-Processing (The Eyes)</h3>
+          <select v-model="settings.ocrMode" class="w-full border p-2 rounded bg-white text-sm mb-3"><option value="none">None (Vision Mode)</option><option value="google">Google Cloud Vision</option><option value="lmstudio_vlm">LM Studio Local VLM</option></select>
+          <div v-if="settings.ocrMode === 'google'" class="ml-2 pl-4 border-l-2 border-blue-400"><label class="block text-xs font-bold mb-1">Google Cloud API Key</label><input type="password" v-model="settings.googleVisionKey" class="w-full border p-2 rounded font-mono text-sm"></div>
+          <div v-if="settings.ocrMode === 'lmstudio_vlm'" class="ml-2 pl-4 border-l-2 border-purple-400"><label class="block text-xs font-bold mb-1">Local VLM Model</label><input v-if="!availableLMStudioModels.length" type="text" v-model="settings.ocrLmStudioModel" class="w-full border p-2 rounded font-mono text-sm"><select v-else v-model="settings.ocrLmStudioModel" class="w-full border p-2 rounded bg-white font-mono text-sm"><option v-if="settings.ocrLmStudioModel && !modelListHas(availableLMStudioModels, settings.ocrLmStudioModel)" :value="settings.ocrLmStudioModel">{{ settings.ocrLmStudioModel }}</option><option value="">Select probed model</option><option v-for="m in availableLMStudioModels" :key="'ocr-' + m.id" :value="m.id">{{ m.name || m.id }}</option></select></div>
+        </div>
+    </div>
+    <div v-if="settingsTab === 'prompts'" class="space-y-3">
+      <div><label class="text-xs font-bold">{{ t('xmlPrompt') }}</label><textarea v-model="settings.xmlPrompt" rows="3" class="w-full border p-2 rounded font-mono text-xs"></textarea></div>
+      <div>
+        <div class="flex justify-between items-center mb-1">
+          <label class="text-xs font-bold" :title="t('promptMarkerTooltip')">{{ t('customDbBasePrompt') }}</label>
+          <button @click="previewInjectedPrompt" class="px-3 py-1 bg-rose-600 text-white rounded text-xs font-bold">{{ t('inject') }}</button>
+        </div>
+        <textarea v-model="settings.customDbPrompt" rows="6" class="w-full border p-2 rounded font-mono text-xs"></textarea>
+        <p v-if="!customDbPromptHasMarker" class="mt-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2" :title="t('promptMarkerTooltip')">{{ t('promptMarkerNote') }}</p>
+      </div>
+      <div>
+        <label class="text-xs font-bold">{{ t('injectedPreview') }}</label>
+        <textarea v-model="injectedPromptPreview" rows="8" readonly class="w-full border p-2 rounded font-mono text-xs bg-gray-50"></textarea>
+      </div>
+      <div><label class="text-xs font-bold">Dynamic Prompt</label><textarea v-model="settings.dynamicPrompt" rows="3" class="w-full border p-2 rounded font-mono text-xs"></textarea></div>
+      <div><label class="text-xs font-bold">OCR Prompt</label><textarea v-model="settings.ocrPrompt" rows="3" class="w-full border p-2 rounded font-mono text-xs"></textarea></div>
+    </div>
+    <div v-if="settingsTab === 'schema'">
+      <div class="flex justify-between items-center mb-2">
+        <label class="text-sm font-bold">{{ t('centralSchema') }}</label>
+        <button @click="applySchemaDraft" class="px-3 py-1 bg-gray-800 text-white rounded text-xs font-bold">{{ t('applySchema') }}</button>
+      </div>
+      <textarea v-model="schemaDraft" rows="22" class="w-full border p-2 rounded font-mono text-xs"></textarea>
+    </div>
+    <div v-if="settingsTab === 'mapping'">
+      <div class="flex justify-between items-center mb-3">
+        <label class="text-sm font-bold">{{ t('mapping') }}</label>
+        <button @click="applyMappingDraft" class="px-3 py-1 bg-gray-800 text-white rounded text-xs font-bold">{{ t('applyMapping') }}</button>
+      </div>
+      <div class="border rounded overflow-hidden">
+        <div class="grid grid-cols-2 bg-gray-100 text-xs font-bold text-gray-600 border-b">
+          <div class="p-2 border-r">{{ t('mappingTarget') }}</div>
+          <div class="p-2">{{ t('mappingSource') }}</div>
+        </div>
+        <div v-for="row in mappingRows" :key="row.path" class="grid grid-cols-2 border-b last:border-b-0 text-xs">
+          <div class="p-2 border-r font-mono text-gray-700">{{ row.path }}</div>
+          <div class="p-1">
+            <select v-model="mappingModel[row.path]" class="w-full border rounded p-1 bg-white font-mono text-xs">
+              <option value="">{{ t('notMapped') }}</option>
+              <option v-for="sourcePath in mappingSourcePaths" :key="row.path + '-' + sourcePath" :value="sourcePath">{{ sourcePath }}</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <textarea v-model="mappingDraft" rows="6" class="w-full border p-2 rounded font-mono text-xs mt-3 bg-gray-50" readonly></textarea>
+    </div>
+</div>
+<div class="p-4 border-t bg-gray-50 flex justify-between gap-3">
+    <div class="flex gap-2">
+        <input ref="settingsFileInput" type="file" accept="application/json,.json" class="hidden" @change="handleSettingsFile">
+        <button @click="$refs.settingsFileInput.click()" class="px-5 py-2 border rounded bg-white font-medium">{{ t('load') }}</button>
+        <button @click="requestBackendSettingsSave" class="px-5 py-2 bg-green-600 text-white rounded font-bold">{{ t('save') }}</button>
+    </div>
+    <button @click="readySettings" class="px-5 py-2 border rounded bg-white font-medium">{{ t('ready') }}</button>
+</div>
+</div>
+</div>
+<div v-if="showOverrideConfirm" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+  <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
+    <div class="p-5 border-b">
+      <h3 class="font-bold text-lg">{{ t('overrideQuestion') }}</h3>
+    </div>
+    <div class="p-5 text-sm text-gray-600">{{ t('overrideHelp') }}</div>
+    <div class="p-4 bg-gray-50 border-t flex justify-end gap-2">
+      <button @click="showOverrideConfirm = false" class="px-4 py-2 border rounded bg-white">{{ t('cancel') }}</button>
+      <button @click="confirmBackendSettingsSave" class="px-4 py-2 rounded bg-red-600 text-white font-bold">{{ t('override') }}</button>
+    </div>
+  </div>
+</div>
+</div>
+<script>
+const { createApp, markRaw } = Vue;
+const CUSTOMDB_SCHEMA_PLACEHOLDER = '{{CUSTOMDB_SCHEMA_JSON}}';
+const UI_TEXT = {
+  en: {
+    appTitle: 'Document Converter',
+    appSubtitle: 'REST backend job processing',
+    settings: 'Configure AI & Prompts',
+    document: 'Document',
+    dropDocument: 'Drag & drop document here',
+    remove: 'Remove',
+    reset: 'Reset',
+    processing: 'Processing...',
+    extractData: 'Extract Data',
+    error: 'Error',
+    currentJob: 'Current Job',
+    jobMonitor: 'Remote Job Monitor',
+    refresh: 'Refresh',
+    loadResult: 'Load Result',
+    xmlMode: 'XML Mode',
+    customDbMode: 'CustomDB Preview',
+    dynamicMode: 'Arbitrary Data',
+    xmlJson: 'XML Mode JSON',
+    exportJson: 'Export JSON',
+    exportTxt: 'Export TXT',
+    visualPreview: 'Visual DB Preview',
+    openTemplate: 'Open Template',
+    defaultTemplate: 'Default Template',
+    defaultTemplateName: 'Default public template',
+    templateLoaded: 'Loaded template',
+    invoiceTitle: 'Invoice',
+    buyer: 'Buyer',
+    seller: 'Seller',
+    buyerShort: 'Buyer',
+    sellerShort: 'Seller',
+    buyerName: 'Buyer Name',
+    buyerAddress: 'Buyer Address',
+    sellerName: 'Seller Name',
+    sellerAddress: 'Seller Address',
+    bank1: 'Bank 1',
+    bank2: 'Bank 2',
+    docNum: 'Doc Num',
+    refNum: 'Ref Num',
+    docDate: 'Date',
+    dueDate: 'Due',
+    lineTitle: 'Title / Description',
+    code: 'Code',
+    unit: 'Unit',
+    qty: 'Qty',
+    price: 'Price',
+    itemSum: 'Item Sum',
+    total: 'Total',
+    addLineItem: 'Add Line Item',
+    description: 'Contract / Description',
+    sourceFile: 'Source File',
+    itemsSum: 'Items Sum',
+    round: 'Round',
+    totalEur: 'TOTAL (EUR)',
+    additionalItemFields: 'Additional Item Fields',
+    additionalCustomDbFields: 'Additional CustomDB Fields',
+    line: 'Line',
+    dynamicLines: 'Dynamic Lines',
+    filterDuplicates: 'Filter duplicates',
+    settingsTitle: 'AI Settings & Prompts',
+    prompts: 'Prompts',
+    xmlPrompt: 'XML Mode Prompt',
+    customDbSchema: 'CustomDB Schema',
+    mapping: 'Custom JSON Mapping',
+    customDbBasePrompt: 'CustomDB Base Prompt',
+    promptMarkerNote: 'Schema marker {{CUSTOMDB_SCHEMA_JSON}} is not in this base prompt. The backend will append the schema during injection, but placing the marker shows exactly where it belongs.',
+    promptMarkerTooltip: 'Use {{CUSTOMDB_SCHEMA_JSON}} in the base prompt. The injected preview is generated separately so old rendered schemas do not need to be saved in the base prompt.',
+    inject: 'Inject',
+    injectedPreview: 'Injected CustomDB Prompt Preview',
+    centralSchema: 'Central CustomDB JSON Schema',
+    applySchema: 'Apply Schema',
+    mappingTarget: 'CustomDB viewer field',
+    mappingSource: 'Extracted JSON source',
+    notMapped: 'Not mapped',
+    applyMapping: 'Apply Mapping',
+    load: 'Load',
+    ready: 'Ready',
+    save: 'Save'
+    ,overrideQuestion: 'Override the backend settings?'
+    ,overrideHelp: 'This writes the current settings to earve_settings.json on the backend.'
+    ,cancel: 'Cancel'
+    ,override: 'Override'
+    ,settingsSaved: 'Backend settings saved.'
+    ,settingsLoaded: 'Settings loaded.'
+  },
+  et_ru: {
+    appTitle: 'Dokumendi konverter / Конвертер документов',
+    appSubtitle: 'REST backend ja tööde järjekord / REST backend и очередь задач',
+    settings: 'AI ja promptid / AI и промпты',
+    document: 'Dokument / Документ',
+    dropDocument: 'Lohista dokument siia / Перетащите документ сюда',
+    remove: 'Eemalda / Удалить',
+    reset: 'Lähtesta / Сброс',
+    processing: 'Töötleb... / Обработка...',
+    extractData: 'Eralda andmed / Извлечь данные',
+    error: 'Viga / Ошибка',
+    currentJob: 'Praegune töö / Текущая задача',
+    jobMonitor: 'Tööde monitor / Монитор задач',
+    refresh: 'Värskenda / Обновить',
+    loadResult: 'Laadi tulemus / Загрузить результат',
+    xmlMode: 'XML mode / XML режим',
+    customDbMode: 'CustomDB eelvaade / Просмотр CustomDB',
+    dynamicMode: 'Vabad andmed / Произвольные данные',
+    xmlJson: 'XML mode JSON / XML режим JSON',
+    exportJson: 'Ekspordi JSON / Экспорт JSON',
+    exportTxt: 'Ekspordi TXT / Экспорт TXT',
+    visualPreview: 'DB eelvaade / Просмотр БД',
+    invoiceTitle: 'Arve / Счет',
+    buyer: 'Ostja / Покупатель',
+    seller: 'Müüja / Продавец',
+    buyerShort: 'Ostja / Покупатель',
+    sellerShort: 'Müüja / Продавец',
+    buyerName: 'Ostja nimi / Имя покупателя',
+    buyerAddress: 'Ostja aadress / Адрес покупателя',
+    sellerName: 'Müüja nimi / Имя продавца',
+    sellerAddress: 'Müüja aadress / Адрес продавца',
+    bank1: 'Pank 1 / Банк 1',
+    bank2: 'Pank 2 / Банк 2',
+    docNum: 'Arve nr / № счета',
+    refNum: 'Viitenumber / Ссылка',
+    docDate: 'Kuupäev / Дата',
+    dueDate: 'Tähtaeg / Срок оплаты',
+    lineTitle: 'Nimetus / Описание',
+    code: 'Kood / Код',
+    unit: 'Ühik / Ед.',
+    qty: 'Kogus / Кол-во',
+    price: 'Hind / Цена',
+    itemSum: 'Summa / Сумма',
+    total: 'Kokku / Итого',
+    addLineItem: 'Lisa rida / Добавить строку',
+    description: 'Leping/kirjeldus / Договор/описание',
+    sourceFile: 'Lähtefail / Исходный файл',
+    itemsSum: 'Ridade summa / Сумма строк',
+    round: 'Ümardus / Округление',
+    totalEur: 'KOKKU / ИТОГО (EUR)',
+    additionalItemFields: 'Lisaväljad ridadel / Доп. поля строк',
+    additionalCustomDbFields: 'CustomDB lisaväljad / Доп. поля CustomDB',
+    line: 'Rida / Строка',
+    dynamicLines: 'Vabad read / Произвольные строки',
+    settingsTitle: 'AI seadistused ja promptid / Настройки AI и промпты',
+    prompts: 'Promptid / Промпты',
+    xmlPrompt: 'XML mode prompt / XML режим промпт',
+    customDbSchema: 'CustomDB skeem / Схема CustomDB',
+    mapping: 'JSON mapping / Маппинг JSON',
+    customDbBasePrompt: 'CustomDB põhiprompt / Базовый промпт CustomDB',
+    inject: 'Sisesta / Вставить',
+    injectedPreview: 'Lõplik prompt / Итоговый промпт',
+    centralSchema: 'Keskne CustomDB JSON skeem / Центральная JSON-схема CustomDB',
+    applySchema: 'Rakenda skeem / Применить схему',
+    mappingTarget: 'CustomDB välja / Поле CustomDB',
+    mappingSource: 'JSON allikas / Источник JSON',
+    notMapped: 'Pole seotud / Не связано',
+    applyMapping: 'Rakenda mapping / Применить маппинг',
+    load: 'Laadi / Загрузить',
+    ready: 'Valmis / Готово',
+    save: 'Salvesta / Сохранить'
+    ,overrideQuestion: 'Kirjutan backend seaded üle? / Перезаписать настройки backend?'
+    ,overrideHelp: 'Praegused seaded salvestatakse backendis faili earve_settings.json. / Текущие настройки будут записаны в earve_settings.json.'
+    ,cancel: 'Tühista / Отмена'
+    ,override: 'Kirjuta üle / Перезаписать'
+    ,settingsSaved: 'Backend seaded salvestatud. / Настройки backend сохранены.'
+    ,settingsLoaded: 'Seaded laaditud. / Настройки загружены.'
+  }
+};
+const DEFAULT_CUSTOMDB_SCHEMA = {
+  doc_num: '', doc_date: 'YYYY-MM-DD', due_date: 'YYYY-MM-DD', ref_num: '', description: '', src_path: '',
+  vat_rate: 0, items_sum: 0, vat_sum: 0, total_sum: 0, round_sum: 0,
+  buyer: { name: '', address: '' },
+  counterparty: { name: '', reg_num: '', vat_num: '', address: '' },
+  items: [{ title: '', description: '', code: '', amount: 1, unit: '', item_price: 0, item_sum: 0, vat_sum: 0, total_sum: 0 }]
+};
+const KNOWN_ROOT_FIELDS = ['doc_num','doc_date','due_date','ref_num','description','src_path','vat_rate','items_sum','vat_sum','total_sum','round_sum','buyer','counterparty','items'];
+const KNOWN_BUYER_FIELDS = ['name','address'];
+const KNOWN_COUNTERPARTY_FIELDS = ['name','reg_num','vat_num','address','iban','bank','iban2','bank2'];
+const KNOWN_ITEM_FIELDS = ['title','description','code','amount','unit','item_price','item_sum','vat_sum','total_sum'];
+
+async function loadCustomDbViewerTemplate() {
+  const response = await fetch('customdb-viewer.html', { cache: 'no-store' });
+  if (!response.ok) throw new Error(`Could not load customdb-viewer.html (${response.status})`);
+  return response.text();
+}
+
+function createCustomDbViewerComponent(template) {
+  return {
+    template,
+    props: {
+      customDbForm: { type: Object, required: true },
+      additionalItemFields: { type: Array, required: true },
+      additionalBuyerFields: { type: Array, required: true },
+      additionalCounterpartyFields: { type: Array, required: true },
+      additionalRootFields: { type: Array, required: true },
+      additionalObjectGroups: { type: Array, required: true },
+      schemaHas: { type: Function, required: true },
+      translate: { type: Function, required: true },
+      addCustomDbItem: { type: Function, required: true }
+    }
+  };
+}
+
+async function bootApp() {
+const customDbViewerTemplate = await loadCustomDbViewerTemplate();
+const app = createApp({
+  data() {
+    return {
+      backendBase: localStorage.getItem('split_backend_base') || window.location.origin,
+      uiLang: localStorage.getItem('ui_lang') || 'en',
+      showSettings:false,showOverrideConfirm:false,settingsTab:'ai',settingsError:'',isProcessing:false,ocrStatus:'',errorMsg:'',
+      filePreview:null,fileName:'',fileObj:null,currentJob:null,
+      zoomLevel:1,panX:0,panY:0,isDragging:false,startX:0,startY:0,
+      activeTab:'customdb',availableOpenAiModels:[],availableLMStudioModels:[],isProbingModels:false,
+      settings: { provider:'openai', openAiBaseUrl:'https://api.openai.com/v1', openAiKey:'', openAiModel:'gpt-4o-mini', lmStudioUrl:'http://localhost:1234', lmStudioModel:'', ocrMode:'none', googleVisionKey:'', ocrLmStudioModel:'', xmlPrompt:'', customDbPrompt:'', dynamicPrompt:'', ocrPrompt:'', customDbSchema: JSON.parse(JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA)), customJsonMapping:{}, pipelineSettings:{mode:'customdb'} },
+      schemaDraft: JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA, null, 2),
+      mappingDraft: '{}',
+      mappingModel:{},
+      injectedPromptPreview:'',
+      customDbViewerComponent: markRaw(createCustomDbViewerComponent(customDbViewerTemplate)),
+      customDbViewerTemplateName: UI_TEXT.en.defaultTemplateName,
+      customDbViewerError:'',
+      jobs:[],
+      xmlForm:{},
+      rawCustomDbResult:null,
+      customDbForm:{
+        doc_num:'', doc_date:'', due_date:'', ref_num:'', description:'', src_path:'',
+        vat_rate:0, items_sum:0, vat_sum:0, total_sum:0, round_sum:0,
+        buyer:{ name:'', address:'' },
+        counterparty:{ name:'', reg_num:'', vat_num:'', address:'' },
+        items:[{ title:'', description:'', code:'', amount:1, unit:'', item_price:0, item_sum:0, vat_sum:0, total_sum:0 }]
+      },
+      dynamicText:'',
+      dynamicFilterDuplicates: localStorage.getItem('dynamic_filter_duplicates') === '1'
+    }
+  },
+  computed: {
+    extractBtnClass() { return this.activeTab === 'xml' ? 'bg-blue-600 hover:bg-blue-700' : (this.isCustomDbMode(this.activeTab) ? 'bg-rose-600 hover:bg-rose-700' : 'bg-purple-600 hover:bg-purple-700'); },
+    extractBtnLabel() { return this.activeTab === 'xml' ? 'XML Mode' : (this.isCustomDbMode(this.activeTab) ? 'CustomDB Mode' : 'Dynamic Mode'); },
+    xmlText: { get() { return JSON.stringify(this.xmlForm, null, 2); }, set(v) { try { this.xmlForm = JSON.parse(v || '{}'); } catch(e){} } },
+    customDbText: { get() { return JSON.stringify(this.customDbForm, null, 2); }, set(v) { try { this.customDbForm = JSON.parse(v || '{}'); } catch(e){} } },
+    dynamicOutputText() { return this.dynamicFilterDuplicates ? this.filterDuplicateLines(this.dynamicText) : this.dynamicText; },
+    dynamicVisibleText: {
+      get() { return this.dynamicOutputText; },
+      set(v) { this.dynamicText = v; }
+    },
+    customDbPromptHasMarker() { return String(this.settings.customDbPrompt || '').includes(CUSTOMDB_SCHEMA_PLACEHOLDER); },
+    customDbSchema() { return this.isPlainObject(this.settings.customDbSchema) ? this.settings.customDbSchema : DEFAULT_CUSTOMDB_SCHEMA; },
+    additionalRootFields() { return this.schemaFields(this.customDbSchema, KNOWN_ROOT_FIELDS); },
+    additionalBuyerFields() { return this.schemaFields(this.customDbSchema.buyer || {}, KNOWN_BUYER_FIELDS); },
+    additionalCounterpartyFields() { return this.schemaFields(this.customDbSchema.counterparty || {}, KNOWN_COUNTERPARTY_FIELDS); },
+    additionalObjectGroups() {
+      return Object.keys(this.customDbSchema)
+        .filter(k => !KNOWN_ROOT_FIELDS.includes(k) && this.isPlainObject(this.customDbSchema[k]))
+        .map(k => ({ path: k, label: this.titleize(k), fields: this.schemaFields(this.customDbSchema[k], []) }))
+        .filter(g => g.fields.length);
+    },
+    additionalItemFields() {
+      const itemSchema = Array.isArray(this.customDbSchema.items) && this.customDbSchema.items[0] ? this.customDbSchema.items[0] : {};
+      return this.schemaFields(itemSchema, KNOWN_ITEM_FIELDS);
+    },
+    mappingRows() {
+      return this.schemaPathList(this.customDbSchema).map(path => ({ path, label: this.titleize(path) }));
+    },
+    mappingSourcePaths() {
+      const paths = new Set(this.mappingRows.map(r => r.path));
+      this.objectPathList(this.rawCustomDbResult || this.customDbForm || {}).forEach(path => paths.add(path));
+      return Array.from(paths).sort();
+    }
+  },
+  watch: {
+    uiLang(v) {
+      localStorage.setItem('ui_lang', v);
+    },
+    activeTab(v) {
+      if (!this.isPlainObject(this.settings.pipelineSettings)) this.settings.pipelineSettings = {};
+      this.settings.pipelineSettings.mode = this.normalizeMode(v);
+    },
+    dynamicFilterDuplicates(v) {
+      localStorage.setItem('dynamic_filter_duplicates', v ? '1' : '0');
+    }
+  },
+  async mounted() {
+    localStorage.removeItem('document_converter_settings_v2');
+    const savedBackend = localStorage.getItem('split_backend_base');
+    if (this.isValidHttpUrl(savedBackend)) this.backendBase = savedBackend;
+    await this.loadBootstrap();
+    this.syncSettingsDrafts();
+    this.customDbForm = this.normalizeCustomDb({});
+    await this.refreshJobs();
+    setInterval(this.refreshJobs, 2000);
+  },
+  methods: {
+    apiBase() {
+      const raw = (this.backendBase || '').trim();
+      return this.isValidHttpUrl(raw) ? raw.replace(/\/+$/, '') : 'http://localhost:8000';
+    },
+    isValidHttpUrl(v) {
+      if (!v || typeof v !== 'string') return false;
+      try {
+        const u = new URL(v.trim());
+        return u.protocol === 'http:' || u.protocol === 'https:';
+      } catch (e) {
+        return false;
+      }
+    },
+    t(key) {
+      const pack = UI_TEXT[this.uiLang] || UI_TEXT.en;
+      return pack[key] || UI_TEXT.en[key] || key;
+    },
+    async handleCustomDbTemplateFile(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      try {
+        const template = await file.text();
+        if (!template.trim()) throw new Error('Template file is empty.');
+        this.customDbViewerComponent = markRaw(createCustomDbViewerComponent(template));
+        this.customDbViewerTemplateName = `${this.t('templateLoaded')}: ${file.name}`;
+        this.customDbViewerError = '';
+      } catch (err) {
+        this.customDbViewerError = `Template load failed: ${err.message}`;
+      } finally {
+        e.target.value = '';
+      }
+    },
+    resetCustomDbViewerTemplate() {
+      this.customDbViewerComponent = markRaw(createCustomDbViewerComponent(customDbViewerTemplate));
+      this.customDbViewerTemplateName = this.t('defaultTemplateName');
+      this.customDbViewerError = '';
+    },
+    modelListHas(models, id) {
+      return Array.isArray(models) && models.some(m => m && m.id === id);
+    },
+    normalizeMode(mode) {
+      return mode || 'customdb';
+    },
+    isCustomDbMode(mode) {
+      return this.normalizeMode(mode) === 'customdb';
+    },
+    schemaHas(path) {
+      return this.getPath(this.customDbSchema, path) !== undefined;
+    },
+    settingsTabClass(tab) {
+      return this.settingsTab === tab ? 'bg-white text-gray-900 border border-b-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-100 border border-transparent';
+    },
+    isPlainObject(v) {
+      return !!v && typeof v === 'object' && !Array.isArray(v);
+    },
+    clone(v) {
+      return JSON.parse(JSON.stringify(v));
+    },
+    titleize(key) {
+      return String(key).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    },
+    filterDuplicateLines(text) {
+      const seen = new Set();
+      return String(text || '').split(/\r?\n/).filter(line => {
+        const key = line.trim();
+        if (!key) return true;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).join('\n');
+    },
+    inputType(defaultValue) {
+      if (typeof defaultValue === 'number') return 'number';
+      if (typeof defaultValue === 'string' && /date/i.test(defaultValue)) return 'date';
+      return 'text';
+    },
+    schemaFields(schema, known) {
+      if (!this.isPlainObject(schema)) return [];
+      return Object.keys(schema)
+        .filter(k => !known.includes(k) && !this.isPlainObject(schema[k]) && !Array.isArray(schema[k]))
+        .map(k => ({ path: k, label: this.titleize(k), inputType: this.inputType(schema[k]) }));
+    },
+    schemaPathList(schema, prefix = '') {
+      if (Array.isArray(schema)) {
+        const item = schema.length ? schema[0] : {};
+        return this.schemaPathList(item, `${prefix}[]`);
+      }
+      if (!this.isPlainObject(schema)) return prefix ? [prefix] : [];
+      return Object.entries(schema).flatMap(([key, value]) => {
+        const path = prefix ? `${prefix}.${key}` : key;
+        if (Array.isArray(value)) return this.schemaPathList(value, path);
+        if (this.isPlainObject(value)) return this.schemaPathList(value, path);
+        return [path];
+      });
+    },
+    objectPathList(obj, prefix = '') {
+      if (Array.isArray(obj)) {
+        const item = obj.length ? obj[0] : {};
+        return this.objectPathList(item, `${prefix}[]`);
+      }
+      if (!this.isPlainObject(obj)) return prefix ? [prefix] : [];
+      return Object.entries(obj).flatMap(([key, value]) => {
+        const path = prefix ? `${prefix}.${key}` : key;
+        if (Array.isArray(value)) return this.objectPathList(value, path);
+        if (this.isPlainObject(value)) return this.objectPathList(value, path);
+        return [path];
+      });
+    },
+    defaultFromSchema(schema) {
+      if (Array.isArray(schema)) return schema.length ? [this.defaultFromSchema(schema[0])] : [];
+      if (this.isPlainObject(schema)) {
+        return Object.fromEntries(Object.entries(schema).map(([k, v]) => [k, this.defaultFromSchema(v)]));
+      }
+      return schema;
+    },
+    mergeWithSchema(raw, schema) {
+      const base = this.defaultFromSchema(schema);
+      if (Array.isArray(base)) {
+        const itemSchema = Array.isArray(schema) && schema.length ? schema[0] : {};
+        return Array.isArray(raw) ? raw.map(it => this.mergeWithSchema(it || {}, itemSchema)) : base;
+      }
+      if (this.isPlainObject(base)) {
+        const source = this.isPlainObject(raw) ? raw : {};
+        const merged = { ...base, ...source };
+        for (const key of Object.keys(base)) {
+          if (this.isPlainObject(base[key]) || Array.isArray(base[key])) {
+            merged[key] = this.mergeWithSchema(source[key], schema[key]);
+          }
+        }
+        return merged;
+      }
+      return raw !== undefined && raw !== null ? raw : base;
+    },
+    syncSettingsDrafts() {
+      if (!this.isPlainObject(this.settings.customDbSchema)) this.settings.customDbSchema = this.clone(DEFAULT_CUSTOMDB_SCHEMA);
+      if (!this.isPlainObject(this.settings.customJsonMapping)) this.settings.customJsonMapping = {};
+      if (!this.isPlainObject(this.settings.pipelineSettings)) this.settings.pipelineSettings = { mode: this.activeTab || 'customdb' };
+      this.settings.pipelineSettings.mode = this.normalizeMode(this.settings.pipelineSettings.mode);
+      if (!['customdb', 'xml', 'dynamic'].includes(this.settings.pipelineSettings.mode)) this.settings.pipelineSettings.mode = 'customdb';
+      this.activeTab = this.settings.pipelineSettings.mode;
+      this.schemaDraft = JSON.stringify(this.settings.customDbSchema, null, 2);
+      this.mappingModel = {};
+      for (const row of this.schemaPathList(this.settings.customDbSchema)) {
+        this.mappingModel[row] = this.settings.customJsonMapping[row] || row;
+      }
+      this.mappingDraft = JSON.stringify(this.mappingModel, null, 2);
+      this.injectedPromptPreview = this.renderInjectedPrompt();
+    },
+    applySchemaDraft() {
+      try {
+        const parsed = JSON.parse(this.schemaDraft || '{}');
+        if (!this.isPlainObject(parsed)) throw new Error('CustomDB schema must be a JSON object.');
+        this.settings.customDbSchema = parsed;
+        this.customDbForm = this.normalizeCustomDb(this.customDbForm);
+        for (const row of this.schemaPathList(this.settings.customDbSchema)) {
+          if (!this.mappingModel[row]) this.mappingModel[row] = row;
+        }
+        this.mappingDraft = JSON.stringify(this.mappingModel, null, 2);
+        this.settingsError = '';
+        this.injectedPromptPreview = this.renderInjectedPrompt();
+        return true;
+      } catch (e) {
+        this.settingsError = `Schema JSON error: ${e.message}`;
+        this.settingsTab = 'schema';
+        return false;
+      }
+    },
+    applyMappingDraft() {
+      try {
+        const clean = {};
+        for (const row of this.mappingRows) {
+          clean[row.path] = this.mappingModel[row.path] || '';
+        }
+        this.settings.customJsonMapping = clean;
+        this.mappingDraft = JSON.stringify(clean, null, 2);
+        this.customDbForm = this.normalizeCustomDb(this.applyInboundMapping(this.rawCustomDbResult || this.customDbForm, clean));
+        this.settingsError = '';
+        return true;
+      } catch (e) {
+        this.settingsError = `Mapping error: ${e.message}`;
+        this.settingsTab = 'mapping';
+        return false;
+      }
+    },
+    applyDraftSettings() {
+      if (!this.isPlainObject(this.settings.pipelineSettings)) this.settings.pipelineSettings = {};
+      this.settings.pipelineSettings.mode = this.normalizeMode(this.activeTab);
+      delete this.settings.filterDuplicates;
+      return this.applySchemaDraft() && this.applyMappingDraft();
+    },
+    renderInjectedPrompt() {
+      const schemaBlock = `JSON schema exactly like this:\n${JSON.stringify(this.customDbSchema, null, 2)}`;
+      const base = this.settings.customDbPrompt || '';
+      if (!base.trim()) return '';
+      if (base.includes(CUSTOMDB_SCHEMA_PLACEHOLDER)) return base.replaceAll(CUSTOMDB_SCHEMA_PLACEHOLDER, schemaBlock);
+      return `${base.trim()}\n\n--- INJECTED CUSTOMDB SCHEMA ---\n${schemaBlock}`;
+    },
+    async previewInjectedPrompt() {
+      if (!this.applyDraftSettings()) return;
+      try {
+        const r = await fetch(`${this.apiBase()}/api/prompt/preview`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode:'customdb', settings:this.settings }) });
+        if (!r.ok) throw new Error(await r.text());
+        const data = await r.json();
+        this.injectedPromptPreview = data.prompt || '';
+        this.settingsError = Array.isArray(data.warnings) && data.warnings.length ? data.warnings.join('\n') : '';
+      } catch (e) {
+        this.injectedPromptPreview = '';
+        this.settingsError = `Backend prompt preview failed: ${e.message}`;
+      }
+    },
+    saveSettings() {
+      this.readySettings();
+    },
+    readySettings() {
+      if (!this.applyDraftSettings()) return;
+      localStorage.setItem('split_backend_base', this.apiBase());
+      localStorage.setItem('ui_lang', this.uiLang);
+      this.backendBase = this.apiBase();
+      this.showSettings = false;
+    },
+    requestBackendSettingsSave() {
+      if (!this.applyDraftSettings()) return;
+      this.showOverrideConfirm = true;
+    },
+    async confirmBackendSettingsSave() {
+      try {
+        const r = await fetch(`${this.apiBase()}/api/settings/save`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ settings:this.settings }) });
+        if (!r.ok) throw new Error(await r.text());
+        localStorage.setItem('split_backend_base', this.apiBase());
+        localStorage.setItem('ui_lang', this.uiLang);
+        this.showOverrideConfirm = false;
+        this.settingsError = this.t('settingsSaved');
+      } catch (e) {
+        this.settingsError = `Save failed: ${e.message}`;
+        this.showOverrideConfirm = false;
+      }
+    },
+    async handleSettingsFile(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      try {
+        const loaded = JSON.parse(await file.text());
+        if (!this.isPlainObject(loaded)) throw new Error('Settings file must contain a JSON object.');
+        this.settings = { ...this.settings, ...loaded };
+        this.syncSettingsDrafts();
+        this.customDbForm = this.normalizeCustomDb(this.customDbForm);
+        this.settingsError = this.t('settingsLoaded');
+      } catch (err) {
+        this.settingsError = `Load failed: ${err.message}`;
+      } finally {
+        e.target.value = '';
+      }
+    },
+    async loadBootstrap() {
+      const candidates = [];
+      const preferred = this.apiBase();
+      candidates.push(preferred);
+      if (this.isValidHttpUrl(window.location.origin) && window.location.origin !== preferred) {
+        candidates.push(window.location.origin);
+      }
+      if (!candidates.includes('http://localhost:8000')) candidates.push('http://localhost:8000');
+
+      let lastError = '';
+      for (const base of candidates) {
+        try {
+          const r = await fetch(`${base}/api/bootstrap`);
+          if (!r.ok) {
+            lastError = `Bootstrap ${base}/api/bootstrap returned ${r.status}`;
+            continue;
+          }
+          const data = await r.json();
+          this.backendBase = this.isValidHttpUrl(data && data.backendUrl) ? data.backendUrl : base;
+          if (data && data.settings && typeof data.settings === 'object') {
+            this.settings = { ...this.settings, ...data.settings };
+          }
+          this.syncSettingsDrafts();
+          this.errorMsg = '';
+          return;
+        } catch (e) {
+          lastError = `Bootstrap failed at ${base}: ${e.message}`;
+        }
+      }
+      this.errorMsg = lastError || 'Unable to load settings bootstrap from backend.';
+    },
+    async probeOpenAiModels() {
+      this.isProbingModels = true;
+      try {
+        const r = await fetch(`${this.apiBase()}/api/probe/openai`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ openAiBaseUrl:this.settings.openAiBaseUrl, openAiKey:this.settings.openAiKey }) });
+        if (!r.ok) throw new Error('Probe failed');
+        this.availableOpenAiModels = await r.json();
+      } catch(e) {} finally { this.isProbingModels = false; }
+    },
+    async probeLMStudioModels() {
+      this.isProbingModels = true;
+      try {
+        const r = await fetch(`${this.apiBase()}/api/probe/lmstudio`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ lmStudioUrl:this.settings.lmStudioUrl }) });
+        if (!r.ok) throw new Error('Probe failed');
+        this.availableLMStudioModels = await r.json();
+      } catch(e) {} finally { this.isProbingModels = false; }
+    },
+    handleWheel(e) { const z=0.1; if(e.deltaY>0) this.zoomLevel=Math.max(0.5,this.zoomLevel-z); else this.zoomLevel=Math.min(5,this.zoomLevel+z); },
+    startDrag(e) { this.isDragging=true; this.startX=e.clientX-this.panX; this.startY=e.clientY-this.panY; },
+    onDrag(e) { if(this.isDragging){ this.panX=e.clientX-this.startX; this.panY=e.clientY-this.startY; } },
+    endDrag() { this.isDragging=false; }, zoomIn() { this.zoomLevel=Math.min(5,this.zoomLevel+0.2); }, zoomOut() { this.zoomLevel=Math.max(0.5,this.zoomLevel-0.2); }, resetZoom() { this.zoomLevel=1; this.panX=0; this.panY=0; },
+    clearFile() { this.filePreview=null; this.fileObj=null; this.currentJob=null; this.resetZoom(); },
+    handleDrop(e) { this.processFile(e.dataTransfer.files[0]); },
+    handleFileSelect(e) { this.processFile(e.target.files[0]); },
+    async processFile(f) {
+      if(!f) return;
+      this.fileObj = f;
+      this.fileName = f.name;
+      if(f.type === 'application/pdf') {
+        const buf = await f.arrayBuffer(); const pdf = await pdfjsLib.getDocument(buf).promise; const page = await pdf.getPage(1); const vp = page.getViewport({scale:2.5}); const canvas = document.createElement('canvas'); canvas.height=vp.height; canvas.width=vp.width; await page.render({canvasContext:canvas.getContext('2d'), viewport:vp}).promise; this.filePreview=canvas.toDataURL('image/jpeg',0.95); this.resetZoom();
+      } else {
+        const r = new FileReader(); r.onload=(e)=>{ this.filePreview=e.target.result; this.resetZoom(); }; r.readAsDataURL(f);
+      }
+    },
+    async extractData() {
+      if (!this.fileObj) return;
+      if (!this.applyDraftSettings()) return;
+      this.isProcessing = true; this.ocrStatus = 'Submitting job...'; this.errorMsg = '';
+      try {
+        const fd = new FormData();
+        fd.append('file', this.fileObj);
+        fd.append('mode', this.activeTab);
+        fd.append('settings_json', JSON.stringify(this.settings));
+        const r = await fetch(`${this.apiBase()}/api/jobs`, { method:'POST', body: fd });
+        if (!r.ok) throw new Error(await r.text());
+        const data = await r.json();
+        this.currentJob = { id: data.job_id, progress: 0, stage: 'Queued' };
+        this.ocrStatus = 'Processing...';
+        await this.waitJob(data.job_id);
+      } catch(e) { this.errorMsg = `Extract request failed (${this.apiBase()}/api/jobs): ${e.message}`; } finally { this.isProcessing = false; this.ocrStatus=''; }
+    },
+    async waitJob(id) {
+      for (let i = 0; i < 600; i++) {
+        const r = await fetch(`${this.apiBase()}/api/jobs/${id}`);
+        if (!r.ok) break;
+        const job = await r.json();
+        this.currentJob = job;
+        if (job.status === 'completed') { this.loadJobResult(job); break; }
+        if (job.status === 'failed') { this.errorMsg = job.error || 'Job failed'; break; }
+        await new Promise(res => setTimeout(res, 1000));
+      }
+      await this.refreshJobs();
+    },
+    async refreshJobs() {
+      try {
+        const r = await fetch(`${this.apiBase()}/api/jobs`);
+        if (r.ok) this.jobs = await r.json();
+      } catch(e) {}
+    },
+    loadJobResult(job) {
+      if (job.mode === 'customdb') {
+        const parsed = this.coerceJsonObject(job.result) || this.coerceJsonObject(job.raw_response);
+        if (!parsed) {
+          this.rawCustomDbResult = null;
+          this.dynamicText = typeof job.raw_response === 'string' ? job.raw_response : JSON.stringify(job.result || {}, null, 2);
+          this.errorMsg = 'Completed CustomDB job did not return valid JSON. Raw response was opened in Arbitrary Data.';
+          this.activeTab = 'dynamic';
+          return;
+        }
+        this.errorMsg = '';
+        this.rawCustomDbResult = this.clone(parsed);
+        this.customDbForm = this.normalizeCustomDb(this.applyInboundMapping(this.rawCustomDbResult, this.settings.customJsonMapping || {}));
+      }
+      else if (this.normalizeMode(job.mode) === 'xml') this.xmlForm = job.result || {};
+      else if (typeof job.raw_response === 'string') this.dynamicText = job.raw_response;
+      this.activeTab = this.normalizeMode(job.mode);
+    },
+    coerceJsonObject(value) {
+      if (this.isPlainObject(value)) return value;
+      if (typeof value !== 'string') return null;
+      const start = value.indexOf('{');
+      const end = value.lastIndexOf('}');
+      if (start < 0 || end <= start) return null;
+      try {
+        const parsed = JSON.parse(value.slice(start, end + 1));
+        return this.isPlainObject(parsed) ? parsed : null;
+      } catch (e) {
+        return null;
+      }
+    },
+    normalizeCustomDb(raw) {
+      const schema = this.customDbSchema;
+      const merged = this.mergeWithSchema(raw || {}, schema);
+      if (!this.isPlainObject(merged.buyer)) merged.buyer = {};
+      if (!this.isPlainObject(merged.counterparty)) merged.counterparty = {};
+      if (!Array.isArray(merged.items)) merged.items = [];
+      if (!merged.src_path) merged.src_path = this.fileName || '';
+      if (merged.items.length === 0) this.addCustomDbItemTo(merged.items);
+      return merged;
+    },
+    addCustomDbItem() { this.addCustomDbItemTo(this.customDbForm.items); },
+    addCustomDbItemTo(target) {
+      if (!Array.isArray(target)) return;
+      const itemSchema = Array.isArray(this.customDbSchema.items) && this.customDbSchema.items[0] ? this.customDbSchema.items[0] : DEFAULT_CUSTOMDB_SCHEMA.items[0];
+      target.push(this.defaultFromSchema(itemSchema));
+    },
+    getPath(obj, path) {
+      if (!path) return undefined;
+      const parts = String(path).replace(/\[\]/g, '.0').split('.');
+      return parts.reduce((acc, key) => acc && acc[key] !== undefined ? acc[key] : undefined, obj);
+    },
+    setPath(obj, path, value) {
+      const parts = String(path).replace(/\[\]/g, '.0').split('.');
+      let target = obj;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const key = parts[i];
+        const nextKey = parts[i + 1];
+        if (target[key] === undefined) target[key] = /^\d+$/.test(nextKey) ? [] : {};
+        target = target[key];
+      }
+      target[parts[parts.length - 1]] = value;
+    },
+    getMappedItemValue(source, sourcePath, index) {
+      if (!sourcePath) return undefined;
+      if (sourcePath.startsWith('items[].')) {
+        const itemPath = sourcePath.slice('items[].'.length);
+        return this.getPath(source.items && source.items[index] ? source.items[index] : {}, itemPath);
+      }
+      return this.getPath(source, sourcePath);
+    },
+    applyInboundMapping(source, mapping) {
+      const result = this.defaultFromSchema(this.customDbSchema);
+      const sourceItems = Array.isArray(source && source.items) ? source.items : [];
+      const itemSchema = Array.isArray(this.customDbSchema.items) && this.customDbSchema.items[0] ? this.customDbSchema.items[0] : DEFAULT_CUSTOMDB_SCHEMA.items[0];
+      if (Array.isArray(result.items)) {
+        result.items = sourceItems.length ? sourceItems.map(() => this.defaultFromSchema(itemSchema)) : result.items;
+      }
+
+      for (const targetPath of this.schemaPathList(this.customDbSchema)) {
+        const sourcePath = mapping[targetPath] || targetPath;
+        if (!sourcePath) continue;
+        if (targetPath.startsWith('items[].')) {
+          const targetItemPath = targetPath.slice('items[].'.length);
+          const rowCount = Math.max(sourceItems.length, result.items && result.items.length ? result.items.length : 0);
+          if (!Array.isArray(result.items)) result.items = [];
+          for (let i = 0; i < rowCount; i++) {
+            if (!result.items[i]) result.items[i] = this.defaultFromSchema(itemSchema);
+            const value = this.getMappedItemValue(source, sourcePath, i);
+            if (value !== undefined) this.setPath(result.items[i], targetItemPath, value);
+          }
+        } else {
+          const value = this.getPath(source, sourcePath);
+          if (value !== undefined) this.setPath(result, targetPath, value);
+        }
+      }
+      return result;
+    },
+    pruneToSchema(obj, schema) {
+      if (Array.isArray(schema)) {
+        const itemSchema = schema.length ? schema[0] : {};
+        return Array.isArray(obj) ? obj.map(item => this.pruneToSchema(item || {}, itemSchema)) : [];
+      }
+      if (this.isPlainObject(schema)) {
+        const source = this.isPlainObject(obj) ? obj : {};
+        return Object.fromEntries(Object.keys(schema).map(key => [key, this.pruneToSchema(source[key], schema[key])]));
+      }
+      return obj !== undefined && obj !== null ? obj : schema;
+    },
+    exportCustomDb() {
+      if (!this.applyMappingDraft()) return;
+      this.downloadJson(this.pruneToSchema(this.customDbForm, this.customDbSchema), 'invoice.json');
+    },
+    downloadJson(obj, name) { const b = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; a.click(); },
+    downloadText(txt, name) { const b = new Blob([txt || ''], {type:'text/plain'}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; a.click(); }
+  }
+});
+
+app.mount('#app');
+}
+
+bootApp().catch((error) => {
+  console.error(error);
+  document.getElementById('app').innerHTML = '<div class="m-6 border border-red-300 bg-red-50 p-4 text-red-800">Failed to load the CustomDB viewer template. Start the app through serverstart.bat and check frontend/customdb-viewer.html.</div>';
+});
+</script>
+</body>
+</html>
+

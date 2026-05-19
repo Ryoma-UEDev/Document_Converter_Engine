@@ -1,0 +1,55 @@
+{
+  "provider": "openai",
+  "openAiBaseUrl": "https://api.openai.com/v1",
+  "openAiKey": "",
+  "openAiModel": "gpt-4o-mini",
+  "lmStudioUrl": "http://localhost:1234",
+  "lmStudioModel": "",
+  "ocrMode": "none",
+  "googleVisionKey": "",
+  "ocrLmStudioModel": "",
+  "xmlPrompt": "Analyze this invoice image. Extract the following fields and return ONLY a raw JSON object. Do not explain anything. Output nothing but the JSON. If a field is missing, output an empty string \"\".",
+  "customDbPrompt": "You are an expert assistant for document-to-database extraction.\nYou will receive text or an image of an invoice.\nThe document may contain Estonian, Russian, or mixed Estonian/Russian labels.\n\nYOUR TASK: Extract all invoice data and return it as a single raw JSON object matching the injected schema.\n\nRULES:\n- Return ONLY the JSON object. No markdown, no explanation, no code blocks.\n- Use \"\" for missing text fields, use 0 for missing number fields.\n- All number fields must be numeric, not strings.\n- Dates must be in YYYY-MM-DD format.\n\n{{CUSTOMDB_SCHEMA_JSON}}",
+  "dynamicPrompt": "Analyze this document. Extract EVERY meaningful data point, label, and value you can find.\nDo not guess. Do not hallucinate.\nDo NOT use JSON. Output the data as a simple list of Key-Value pairs, one per line, separated by a colon (:).",
+  "ocrPrompt": "Perform literal OCR transcription, not document understanding.\nImportant:\n* If text is ambiguous, output the uncertain characters exactly as seen.\n* Never replace unclear text with corrected words.\n* Never improve formatting.\n* Never rewrite addresses, dates, or numbers.\n* Never interpret tables semantically.\nReturn only the raw transcription.\nThe document may contain Estonian and Russian text.",
+  "pipelineSettings": {
+    "mode": "customdb"
+  },
+  "customDbSchema": {
+    "doc_num": "",
+    "doc_date": "YYYY-MM-DD",
+    "due_date": "YYYY-MM-DD",
+    "ref_num": "",
+    "description": "",
+    "src_path": "",
+    "vat_rate": 0,
+    "items_sum": 0,
+    "vat_sum": 0,
+    "total_sum": 0,
+    "round_sum": 0,
+    "buyer": {
+      "name": "",
+      "address": ""
+    },
+    "counterparty": {
+      "name": "",
+      "reg_num": "",
+      "vat_num": "",
+      "address": ""
+    },
+    "items": [
+      {
+        "title": "",
+        "description": "",
+        "code": "",
+        "amount": 1,
+        "unit": "",
+        "item_price": 0,
+        "item_sum": 0,
+        "vat_sum": 0,
+        "total_sum": 0
+      }
+    ]
+  },
+  "customJsonMapping": {}
+}
