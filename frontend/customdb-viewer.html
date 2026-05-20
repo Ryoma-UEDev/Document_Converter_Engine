@@ -8,7 +8,7 @@
 
   <!-- 1. DOCUMENT DATA -->
   <section class="flex flex-col gap-4 p-5 bg-gray-50 border border-gray-200 rounded">
-    <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wider border-b border-gray-300 pb-2">1. Document Data</h3>
+    <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wider border-b border-gray-300 pb-2">1. {{ translate('documentData') }}</h3>
     
     <label class="block">
       <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('docNum') }}</span>
@@ -42,12 +42,12 @@
     <h3 class="text-sm font-bold text-blue-800 uppercase tracking-wider border-b border-blue-200 pb-2">2. {{ translate('buyer') }}</h3>
     
     <label class="block">
-      <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('buyerName') || 'Name' }}</span>
+      <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('buyerName') }}</span>
       <input v-model="customDbForm.buyer.name" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none font-bold" />
     </label>
     
     <label class="block">
-      <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('buyerAddress') || 'Address' }}</span>
+      <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('buyerAddress') }}</span>
       <input v-model="customDbForm.buyer.address" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
     </label>
   </section>
@@ -57,23 +57,23 @@
     <h3 class="text-sm font-bold text-rose-800 uppercase tracking-wider border-b border-rose-200 pb-2">3. {{ translate('seller') }}</h3>
     
     <label class="block">
-      <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('sellerName') || 'Name' }}</span>
+      <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('sellerName') }}</span>
       <input v-model="customDbForm.counterparty.name" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none font-bold" />
     </label>
 
     <div class="flex gap-4">
       <label class="block flex-1">
-        <span class="text-[10px] font-bold text-gray-500 uppercase">Reg Num</span>
+        <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('regNum') }}</span>
         <input v-model="customDbForm.counterparty.reg_num" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
       </label>
       <label class="block flex-1">
-        <span class="text-[10px] font-bold text-gray-500 uppercase">KM/VAT</span>
+        <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('vatNum') }}</span>
         <input v-model="customDbForm.counterparty.vat_num" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
       </label>
     </div>
 
     <label class="block">
-      <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('sellerAddress') || 'Address' }}</span>
+      <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('sellerAddress') }}</span>
       <input v-model="customDbForm.counterparty.address" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
     </label>
 
@@ -84,7 +84,7 @@
         <input v-model="customDbForm.counterparty.bank" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
       </label>
       <label v-if="schemaHas('counterparty.iban')" class="block flex-1">
-        <span class="text-[10px] font-bold text-gray-500 uppercase">IBAN 1</span>
+        <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('iban1') }}</span>
         <input v-model="customDbForm.counterparty.iban" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
       </label>
     </div>
@@ -95,7 +95,7 @@
         <input v-model="customDbForm.counterparty.bank2" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
       </label>
       <label v-if="schemaHas('counterparty.iban2')" class="block flex-1">
-        <span class="text-[10px] font-bold text-gray-500 uppercase">IBAN 2</span>
+        <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('iban2') }}</span>
         <input v-model="customDbForm.counterparty.iban2" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" />
       </label>
     </div>
@@ -104,18 +104,18 @@
   <!-- 4. ITEMS -->
   <section class="flex flex-col gap-4 border border-gray-200 rounded p-5">
     <div class="flex justify-between items-center border-b border-gray-300 pb-2">
-      <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wider">4. Items</h3>
+      <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wider">4. {{ translate('itemsSection') }}</h3>
       <button @click="addCustomDbItem" class="text-xs font-bold text-blue-600 hover:text-blue-800 bg-gray-50 px-2 py-1 border rounded shadow-sm">+ {{ translate('addLineItem') }}</button>
     </div>
 
     <div v-if="customDbForm.items.length === 0" class="text-center py-6 text-gray-400 italic border-2 border-dashed rounded">
-      No items added.
+      {{ translate('noItemsAdded') }}
     </div>
 
     <div v-for="(itm, i) in customDbForm.items" :key="i" class="relative border border-gray-300 bg-gray-50 p-4 rounded shadow-sm flex flex-col gap-3">
       <div class="flex justify-between items-center border-b border-gray-200 pb-2">
-        <span class="text-xs font-bold text-gray-500">ITEM #{{ i + 1 }}</span>
-        <button @click="customDbForm.items.splice(i, 1)" class="text-red-500 hover:text-red-700 font-bold px-2">✕ Remove</button>
+        <span class="text-xs font-bold text-gray-500">{{ translate('itemNumber') }} #{{ i + 1 }}</span>
+        <button @click="customDbForm.items.splice(i, 1)" class="text-red-500 hover:text-red-700 font-bold px-2">x {{ translate('remove') }}</button>
       </div>
 
       <label class="block">
@@ -124,7 +124,7 @@
       </label>
       
       <label class="block">
-        <span class="text-[10px] font-bold text-gray-500 uppercase">Description</span>
+        <span class="text-[10px] font-bold text-gray-500 uppercase">{{ translate('description') }}</span>
         <input v-model="itm.description" class="w-full border border-gray-300 rounded p-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none text-xs" />
       </label>
 
@@ -157,7 +157,7 @@
           <input v-model.number="itm.item_sum" type="number" step="any" class="w-full border border-gray-300 rounded p-2 mt-1 outline-none" />
         </label>
         <label class="block">
-          <span class="text-[10px] font-bold text-blue-500 uppercase">VAT/KM</span>
+          <span class="text-[10px] font-bold text-blue-500 uppercase">{{ translate('vat') }}</span>
           <input v-model.number="itm.vat_sum" type="number" step="any" class="w-full border border-gray-300 rounded p-2 mt-1 outline-none text-blue-700" />
         </label>
         <label class="block">
@@ -170,7 +170,7 @@
 
   <!-- 5. SUMMARY / TOTALS -->
   <section class="flex flex-col gap-4 p-5 bg-gray-100 border border-gray-300 rounded shadow-inner">
-    <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider border-b border-gray-300 pb-2">5. Summary / Totals</h3>
+    <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider border-b border-gray-300 pb-2">5. {{ translate('summaryTotals') }}</h3>
     
     <label class="flex justify-between items-center">
       <span class="text-xs font-bold text-gray-600 uppercase">{{ translate('itemsSum') }}</span>
@@ -179,7 +179,7 @@
 
     <div class="flex justify-between items-center">
       <label class="flex items-center gap-2 text-xs font-bold text-gray-600 uppercase">
-        VAT/KM Rate
+        {{ translate('vatRate') }}
         <input v-model.number="customDbForm.vat_rate" type="number" step="any" class="w-16 border border-gray-300 rounded p-1 text-center outline-none" />%
       </label>
       <input v-model.number="customDbForm.vat_sum" type="number" step="any" class="w-1/3 border border-gray-300 rounded p-2 text-right outline-none font-medium" />
