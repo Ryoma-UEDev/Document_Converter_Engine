@@ -25,6 +25,15 @@ CUSTOMDB_MODE = "customdb"
 XML_MODE = "xml"
 DYNAMIC_MODE = "dynamic"
 VALID_MODES = (CUSTOMDB_MODE, XML_MODE, DYNAMIC_MODE)
+LLM_PROVIDERS = ("ollama", "lmstudio", "openai")
+OCR_PROVIDERS = ("none", "google", "ollama", "lmstudio", "openai")
+LEGACY_OCR_MODES = {
+    "none": "none",
+    "google": "google",
+    "lmstudio_vlm": "lmstudio",
+    "ollama_vlm": "ollama",
+    "openai_vlm": "openai",
+}
 DEFAULT_CUSTOMDB_SCHEMA: Dict[str, Any] = {
     "doc_num": "",
     "doc_date": "YYYY-MM-DD",
@@ -67,21 +76,39 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "openAiBaseUrl": "https://api.openai.com/v1",
     "openAiKey": "",
     "openAiModel": "gpt-4o-mini",
+    "ollamaUrl": "http://localhost:11434/v1",
+    "ollamaModel": "",
     "lmStudioUrl": "http://localhost:1234",
     "lmStudioModel": "",
+    "ocrProvider": "none",
     "ocrMode": "none",
     "googleVisionKey": "",
+    "ocrOpenAiBaseUrl": "https://api.openai.com/v1",
+    "ocrOpenAiKey": "",
+    "ocrOpenAiModel": "",
+    "ocrOllamaUrl": "http://localhost:11434/v1",
+    "ocrOllamaModel": "",
+    "ocrLmStudioUrl": "http://localhost:1234",
     "ocrLmStudioModel": "",
     "xmlPrompt": "",
     "customDbPrompt": "",
     "dynamicPrompt": "",
     "ocrPrompt": "",
+    "maxTokens": 2048,
+    "ollamaMaxTokens": 8192,
+    "ocrMaxTokens": 4096,
+    "ocrOllamaMaxTokens": 8192,
     "customDbSchema": DEFAULT_CUSTOMDB_SCHEMA,
     "customJsonMapping": {},
     "pipelineSettings": {
         "mode": CUSTOMDB_MODE,
     },
 }
+
+DEFAULT_MAX_TOKENS = 2048
+DEFAULT_OLLAMA_MAX_TOKENS = 8192
+DEFAULT_OCR_MAX_TOKENS = 4096
+DEFAULT_OCR_OLLAMA_MAX_TOKENS = 8192
 
 
 def utc_now() -> str:
@@ -94,6 +121,52 @@ def normalize_mode(mode: Optional[str]) -> str:
     return mode
 
 
+def normalize_provider(provider: Optional[str]) -> str:
+    if provider == "openai_compatible":
+        return "openai"
+    if provider in LLM_PROVIDERS:
+        return provider
+    return "openai"
+
+
+def normalize_ocr_provider(settings: Dict[str, Any]) -> str:
+    provider = settings.get("ocrProvider")
+    legacy_provider = LEGACY_OCR_MODES.get(settings.get("ocrMode", "none"), "none")
+    if provider == "none" and legacy_provider != "none":
+        return legacy_provider
+    if provider in OCR_PROVIDERS:
+        return provider
+    return legacy_provider
+
+
+def normalize_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
+    settings["provider"] = normalize_provider(settings.get("provider"))
+    settings["ocrProvider"] = normalize_ocr_provider(settings)
+    settings["ocrMode"] = settings["ocrProvider"]
+
+    if not settings.get("ocrOpenAiBaseUrl"):
+        settings["ocrOpenAiBaseUrl"] = settings.get("openAiBaseUrl", DEFAULT_SETTINGS["openAiBaseUrl"])
+    if not settings.get("ocrOpenAiKey"):
+        settings["ocrOpenAiKey"] = settings.get("openAiKey", "")
+    if not settings.get("ocrOpenAiModel"):
+        settings["ocrOpenAiModel"] = settings.get("openAiModel", "")
+    if not settings.get("ocrOllamaUrl"):
+        settings["ocrOllamaUrl"] = settings.get("ollamaUrl", DEFAULT_SETTINGS["ollamaUrl"])
+    if not settings.get("ocrLmStudioUrl"):
+        settings["ocrLmStudioUrl"] = settings.get("lmStudioUrl", DEFAULT_SETTINGS["lmStudioUrl"])
+
+    if not isinstance(settings.get("customDbSchema"), dict):
+        settings["customDbSchema"] = copy.deepcopy(DEFAULT_CUSTOMDB_SCHEMA)
+    if not isinstance(settings.get("customJsonMapping"), dict):
+        settings["customJsonMapping"] = {}
+    if not isinstance(settings.get("pipelineSettings"), dict):
+        settings["pipelineSettings"] = {"mode": CUSTOMDB_MODE}
+    settings["pipelineSettings"]["mode"] = normalize_mode(settings["pipelineSettings"].get("mode"))
+    if settings["pipelineSettings"].get("mode") not in VALID_MODES:
+        settings["pipelineSettings"]["mode"] = CUSTOMDB_MODE
+    return settings
+
+
 def load_base_settings() -> Dict[str, Any]:
     settings = copy.deepcopy(DEFAULT_SETTINGS)
     if SETTINGS_PATH.exists():
@@ -103,18 +176,7 @@ def load_base_settings() -> Dict[str, Any]:
             settings.pop("updbPrompt", None)
             settings.pop("updbSchema", None)
             settings.pop("filterDuplicates", None)
-    if not isinstance(settings.get("customDbSchema"), dict):
-        settings["customDbSchema"] = copy.deepcopy(DEFAULT_CUSTOMDB_SCHEMA)
-    if not isinstance(settings.get("customJsonMapping"), dict):
-        settings["customJsonMapping"] = {}
-    if not isinstance(settings.get("pipelineSettings"), dict):
-        settings["pipelineSettings"] = {"mode": CUSTOMDB_MODE}
-    if settings.get("provider") not in ("openai", "lmstudio"):
-        settings["provider"] = "openai"
-    settings["pipelineSettings"]["mode"] = normalize_mode(settings["pipelineSettings"].get("mode"))
-    if settings["pipelineSettings"].get("mode") not in VALID_MODES:
-        settings["pipelineSettings"]["mode"] = CUSTOMDB_MODE
-    return settings
+    return normalize_settings(settings)
 
 
 class JobStore:
@@ -193,7 +255,45 @@ def _to_base64_image(upload: UploadFile, raw_bytes: bytes) -> str:
     return base64.b64encode(raw_bytes).decode("ascii")
 
 
-def _openai_chat(url: str, key: str, model: str, prompt: str, base64_image: Optional[str], doc_text: Optional[str]) -> str:
+def _positive_int(value: Any, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _message_text_from_chat_response(data: Dict[str, Any], label: str) -> str:
+    choices = data.get("choices") or []
+    if not choices:
+        raise ValueError(f"{label} returned no choices")
+
+    first = choices[0] or {}
+    message = first.get("message") or {}
+    content = message.get("content")
+    if isinstance(content, str) and content.strip():
+        return content
+
+    reasoning = message.get("reasoning") or message.get("thinking")
+    finish_reason = first.get("finish_reason") or first.get("done_reason") or "unknown"
+    if isinstance(reasoning, str) and reasoning.strip():
+        raise ValueError(
+            f"{label} returned reasoning but no final content "
+            f"(finish_reason={finish_reason}). Increase token limit or use a non-thinking model."
+        )
+    raise ValueError(f"{label} returned empty content (finish_reason={finish_reason})")
+
+
+def _openai_chat(
+    url: str,
+    key: str,
+    model: str,
+    prompt: str,
+    base64_image: Optional[str],
+    doc_text: Optional[str],
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+    label: str = "Model",
+) -> str:
     content = [{"type": "text", "text": prompt}]
     if doc_text:
         content.append({"type": "text", "text": "\n\n--- DOC TEXT ---\n" + doc_text})
@@ -208,12 +308,12 @@ def _openai_chat(url: str, key: str, model: str, prompt: str, base64_image: Opti
         "model": model,
         "messages": [{"role": "user", "content": content}],
         "temperature": 0.1,
-        "max_tokens": 2048,
+        "max_tokens": max_tokens,
     }
     r = requests.post(url, headers=headers, json=payload, timeout=240)
     r.raise_for_status()
     data = r.json()
-    return data["choices"][0]["message"]["content"]
+    return _message_text_from_chat_response(data, label)
 
 
 def _google_ocr(api_key: str, base64_image: str) -> str:
@@ -285,10 +385,11 @@ def _extract_mode_prompt(mode: str, settings: Dict[str, Any]) -> str:
 
 
 def _probe_openai_compatible_models(base_url: str, api_key: str) -> List[Dict[str, str]]:
-    if not base_url or not api_key:
+    if not base_url:
         return []
     url = f"{base_url.rstrip('/')}/models"
-    r = requests.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=60)
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    r = requests.get(url, headers=headers, timeout=60)
     r.raise_for_status()
     data = r.json()
     models = data.get("data", [])
@@ -306,6 +407,84 @@ def _probe_lmstudio_models(base_url: str) -> List[Dict[str, str]]:
     return [{"id": m.get("id", ""), "name": m.get("id", "")} for m in models if m.get("id")]
 
 
+def _run_chat_provider(settings: Dict[str, Any], prompt: str, base64_image: Optional[str], doc_text: Optional[str]) -> str:
+    provider = normalize_provider(settings.get("provider"))
+    if provider == "ollama":
+        return _openai_chat(
+            f"{settings.get('ollamaUrl', '').rstrip('/')}/chat/completions",
+            "",
+            settings.get("ollamaModel", ""),
+            prompt,
+            base64_image,
+            doc_text,
+            _positive_int(settings.get("ollamaMaxTokens"), DEFAULT_OLLAMA_MAX_TOKENS),
+            "Ollama extraction model",
+        )
+    if provider == "lmstudio":
+        lm_url = settings.get("lmStudioUrl", "http://localhost:1234").rstrip("/")
+        return _openai_chat(
+            f"{lm_url}/v1/chat/completions",
+            "x",
+            settings.get("lmStudioModel", ""),
+            prompt,
+            base64_image,
+            doc_text,
+            _positive_int(settings.get("maxTokens"), DEFAULT_MAX_TOKENS),
+            "LM Studio extraction model",
+        )
+    return _openai_chat(
+        f"{settings.get('openAiBaseUrl', '').rstrip('/')}/chat/completions",
+        settings.get("openAiKey", ""),
+        settings.get("openAiModel", ""),
+        prompt,
+        base64_image,
+        doc_text,
+        _positive_int(settings.get("maxTokens"), DEFAULT_MAX_TOKENS),
+        "OpenAI-compatible extraction model",
+    )
+
+
+def _run_vlm_ocr(settings: Dict[str, Any], base64_image: str) -> str:
+    ocr_provider = normalize_ocr_provider(settings)
+    prompt = _require_text_setting(settings, "ocrPrompt", "OCR prompt")
+
+    if ocr_provider == "ollama":
+        return _openai_chat(
+            f"{settings.get('ocrOllamaUrl', '').rstrip('/')}/chat/completions",
+            "",
+            settings.get("ocrOllamaModel", ""),
+            prompt,
+            base64_image,
+            None,
+            _positive_int(settings.get("ocrOllamaMaxTokens"), DEFAULT_OCR_OLLAMA_MAX_TOKENS),
+            "Ollama OCR model",
+        )
+    if ocr_provider == "lmstudio":
+        lm_url = settings.get("ocrLmStudioUrl") or settings.get("lmStudioUrl", "http://localhost:1234")
+        return _openai_chat(
+            f"{lm_url.rstrip('/')}/v1/chat/completions",
+            "x",
+            settings.get("ocrLmStudioModel", ""),
+            prompt,
+            base64_image,
+            None,
+            _positive_int(settings.get("ocrMaxTokens"), DEFAULT_OCR_MAX_TOKENS),
+            "LM Studio OCR model",
+        )
+    if ocr_provider == "openai":
+        return _openai_chat(
+            f"{settings.get('ocrOpenAiBaseUrl', '').rstrip('/')}/chat/completions",
+            settings.get("ocrOpenAiKey", ""),
+            settings.get("ocrOpenAiModel", ""),
+            prompt,
+            base64_image,
+            None,
+            _positive_int(settings.get("ocrMaxTokens"), DEFAULT_OCR_MAX_TOKENS),
+            "OpenAI-compatible OCR model",
+        )
+    raise ValueError(f"Unsupported OCR provider: {ocr_provider}")
+
+
 def _process_job(job_id: str, mode: str, base64_image: str, settings: Dict[str, Any]) -> None:
     try:
         store.update(job_id, status="processing", progress=10, stage="Preparing pipeline")
@@ -313,52 +492,27 @@ def _process_job(job_id: str, mode: str, base64_image: str, settings: Dict[str, 
         doc_text: Optional[str] = None
         raw_ocr = ""
 
-        ocr_mode = settings.get("ocrMode", "none")
-        if ocr_mode == "google":
+        ocr_provider = normalize_ocr_provider(settings)
+        if ocr_provider == "google":
             store.update(job_id, progress=30, stage="Running Google OCR")
             raw_ocr = _google_ocr(settings.get("googleVisionKey", ""), base64_image)
             doc_text = raw_ocr
-        elif ocr_mode == "lmstudio_vlm":
-            store.update(job_id, progress=30, stage="Running Local VLM OCR")
-            lm_url = settings.get("lmStudioUrl", "http://localhost:1234").rstrip("/")
-            raw_ocr = _openai_chat(
-                f"{lm_url}/v1/chat/completions",
-                "x",
-                settings.get("ocrLmStudioModel", ""),
-                _require_text_setting(settings, "ocrPrompt", "OCR prompt"),
-                base64_image,
-                None,
-            )
+        elif ocr_provider in ("ollama", "lmstudio", "openai"):
+            store.update(job_id, progress=30, stage=f"Running {ocr_provider} VLM OCR")
+            raw_ocr = _run_vlm_ocr(settings, base64_image)
             doc_text = raw_ocr
 
         store.update(job_id, progress=65, stage="Running extraction model", raw_ocr_text=raw_ocr)
-
-        if settings.get("provider") == "openai":
-            out = _openai_chat(
-                f"{settings.get('openAiBaseUrl', '').rstrip('/')}/chat/completions",
-                settings.get("openAiKey", ""),
-                settings.get("openAiModel", ""),
-                prompt,
-                None if doc_text else base64_image,
-                doc_text,
-            )
-        else:
-            lm_url = settings.get("lmStudioUrl", "http://localhost:1234").rstrip("/")
-            out = _openai_chat(
-                f"{lm_url}/v1/chat/completions",
-                "x",
-                settings.get("lmStudioModel", ""),
-                prompt,
-                None if doc_text else base64_image,
-                doc_text,
-            )
+        out = _run_chat_provider(settings, prompt, None if doc_text else base64_image, doc_text)
 
         parsed: Any = out
         if mode in (XML_MODE, CUSTOMDB_MODE):
             s = out.find("{")
             e = out.rfind("}")
-            if s >= 0 and e > s:
-                parsed = json.loads(out[s : e + 1])
+            if s < 0 or e <= s:
+                store.update(job_id, raw_response=out)
+                raise ValueError("Extraction model did not return a JSON object. Raw response was saved on the job.")
+            parsed = json.loads(out[s : e + 1])
 
         store.update(
             job_id,
@@ -398,17 +552,7 @@ def save_settings(payload: Dict[str, Any]) -> Dict[str, Any]:
     settings.pop("updbPrompt", None)
     settings.pop("updbSchema", None)
     settings.pop("filterDuplicates", None)
-    if settings.get("provider") not in ("openai", "lmstudio"):
-        settings["provider"] = "openai"
-    if not isinstance(settings.get("customDbSchema"), dict):
-        settings["customDbSchema"] = copy.deepcopy(DEFAULT_CUSTOMDB_SCHEMA)
-    if not isinstance(settings.get("customJsonMapping"), dict):
-        settings["customJsonMapping"] = {}
-    if not isinstance(settings.get("pipelineSettings"), dict):
-        settings["pipelineSettings"] = {"mode": CUSTOMDB_MODE}
-    settings["pipelineSettings"]["mode"] = normalize_mode(settings["pipelineSettings"].get("mode"))
-    if settings["pipelineSettings"].get("mode") not in VALID_MODES:
-        settings["pipelineSettings"]["mode"] = CUSTOMDB_MODE
+    settings = normalize_settings(settings)
 
     SETTINGS_PATH.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"status": "ok", "path": str(SETTINGS_PATH)}
@@ -430,6 +574,14 @@ def probe_openai(payload: Dict[str, Any]) -> List[Dict[str, str]]:
         raise HTTPException(400, str(exc)) from exc
 
 
+@app.post("/api/probe/ollama")
+def probe_ollama(payload: Dict[str, Any]) -> List[Dict[str, str]]:
+    try:
+        return _probe_openai_compatible_models(payload.get("ollamaUrl", ""), "")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, str(exc)) from exc
+
+
 @app.post("/api/probe/lmstudio")
 def probe_lmstudio(payload: Dict[str, Any]) -> List[Dict[str, str]]:
     try:
@@ -447,6 +599,7 @@ def prompt_preview(payload: Dict[str, Any]) -> Dict[str, Any]:
     user_settings = payload.get("settings")
     if isinstance(user_settings, dict):
         settings.update(user_settings)
+        settings = normalize_settings(settings)
 
     if mode != CUSTOMDB_MODE:
         try:
@@ -490,12 +643,7 @@ async def create_job(
             user_settings = json.loads(settings_json)
             if isinstance(user_settings, dict):
                 base_settings.update(user_settings)
-                if not isinstance(base_settings.get("customDbSchema"), dict):
-                    base_settings["customDbSchema"] = copy.deepcopy(DEFAULT_CUSTOMDB_SCHEMA)
-                if not isinstance(base_settings.get("customJsonMapping"), dict):
-                    base_settings["customJsonMapping"] = {}
-                if not isinstance(base_settings.get("pipelineSettings"), dict):
-                    base_settings["pipelineSettings"] = {"mode": CUSTOMDB_MODE}
+                base_settings = normalize_settings(base_settings)
         except json.JSONDecodeError as exc:
             raise HTTPException(400, f"Invalid settings_json: {exc}") from exc
 

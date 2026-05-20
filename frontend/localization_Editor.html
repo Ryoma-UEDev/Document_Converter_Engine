@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>i18n JSON Editor</title>
+    <style>
+        :root {
+            --primary: #007bff;
+            --primary-hover: #0056b3;
+            --danger: #dc3545;
+            --danger-hover: #c82333;
+            --success: #28a745;
+            --success-hover: #218838;
+            --bg: #f4f6f9;
+            --border: #dee2e6;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            position: sticky;
+            top: 10px;
+            z-index: 1000;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            color: white;
+            transition: background 0.2s;
+        }
+
+        button.primary { background-color: var(--primary); }
+        button.primary:hover { background-color: var(--primary-hover); }
+        
+        button.success { background-color: var(--success); }
+        button.success:hover { background-color: var(--success-hover); }
+        
+        button.danger { background-color: var(--danger); padding: 8px 12px; }
+        button.danger:hover { background-color: var(--danger-hover); }
+
+        input[type="file"] { display: none; }
+
+        .search-bar {
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            width: 250px;
+            font-size: 14px;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            overflow: auto;
+            max-height: calc(100vh - 120px);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            padding: 12px 15px;
+            font-weight: 600;
+            border-bottom: 2px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        td {
+            padding: 10px 15px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
+
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        input.key-input, textarea.lang-input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 8px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 14px;
+        }
+
+        input.key-input {
+            font-weight: bold;
+            color: #495057;
+        }
+
+        textarea.lang-input {
+            resize: vertical;
+            min-height: 40px;
+            line-height: 1.4;
+        }
+
+        textarea.lang-input:focus, input.key-input:focus {
+            outline: none;
+            border-color: #80bdff;
+            box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+        }
+
+        .action-cell {
+            text-align: center;
+            width: 50px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>i18n Translation Editor</h1>
+        <div class="toolbar">
+            <input type="text" id="search" class="search-bar" placeholder="Search keys or text..." onkeyup="filterTable()">
+            <button class="success" onclick="addNewRow()">+ Add Key</button>
+            <label class="primary button" style="padding: 8px 16px; border-radius: 4px; cursor: pointer; background: #007bff; color: white; font-weight:bold;">
+                Import JSON
+                <input type="file" id="import-file" accept=".json" onchange="importJSON(event)">
+            </label>
+            <button class="primary" onclick="exportJSON()">Export JSON</button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table id="i18n-table">
+            <thead>
+                <tr id="table-header">
+                    <!-- Headers will be generated here -->
+                </tr>
+            </thead>
+            <tbody id="editor-body">
+                <!-- Rows will be generated here -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // Your initial JSON data embedded so it works immediately
+        const initialData = {
+          "en": {
+            "appTitle": "Document Converter",
+            "appSubtitle": "REST backend job processing",
+            "settings": "Configure AI & Prompts",
+            "document": "Document",
+            "dropDocument": "Drag & drop document here",
+            "remove": "Remove",
+            "reset": "Reset",
+            "processing": "Processing...",
+            "extractData": "Extract Data",
+            "error": "Error",
+            "currentJob": "Current Job",
+            "jobMonitor": "Remote Job Monitor",
+            "refresh": "Refresh",
+            "loadResult": "Load Result",
+            "xmlMode": "XML Mode",
+            "customDbMode": "CustomDB Preview",
+            "dynamicMode": "Arbitrary Data",
+            "xmlJson": "XML Mode JSON",
+            "exportJson": "Export JSON",
+            "exportTxt": "Export TXT",
+            "visualPreview": "Visual DB Preview",
+            "openTemplate": "Open Template",
+            "defaultTemplate": "Default Template",
+            "defaultTemplateName": "Default public template",
+            "templateLoaded": "Loaded template",
+            "invoiceTitle": "Invoice",
+            "buyer": "Buyer",
+            "seller": "Seller",
+            "buyerShort": "Buyer",
+            "sellerShort": "Seller",
+            "buyerName": "Buyer Name",
+            "buyerAddress": "Buyer Address",
+            "sellerName": "Seller Name",
+            "sellerAddress": "Seller Address",
+            "bank1": "Bank 1",
+            "bank2": "Bank 2",
+            "docNum": "Doc Num",
+            "refNum": "Ref Num",
+            "docDate": "Date",
+            "dueDate": "Due",
+            "lineTitle": "Title / Description",
+            "code": "Code",
+            "unit": "Unit",
+            "qty": "Qty",
+            "price": "Price",
+            "itemSum": "Item Sum",
+            "total": "Total",
+            "addLineItem": "Add Line Item",
+            "description": "Contract / Description",
+            "sourceFile": "Source File",
+            "itemsSum": "Items Sum",
+            "round": "Round",
+            "totalEur": "TOTAL (EUR)",
+            "additionalItemFields": "Additional Item Fields",
+            "additionalCustomDbFields": "Additional CustomDB Fields",
+            "line": "Line",
+            "dynamicLines": "Dynamic Lines",
+            "filterDuplicates": "Filter duplicates",
+            "settingsTitle": "AI Settings & Prompts",
+            "prompts": "Prompts",
+            "xmlPrompt": "XML Mode Prompt",
+            "customDbSchema": "CustomDB Schema",
+            "mapping": "Custom JSON Mapping",
+            "customDbBasePrompt": "CustomDB Base Prompt",
+            "promptMarkerNote": "Schema marker {{CUSTOMDB_SCHEMA_JSON}} is not in this base prompt. The backend will append the schema during injection, but placing the marker shows exactly where it belongs.",
+            "promptMarkerTooltip": "Use {{CUSTOMDB_SCHEMA_JSON}} in the base prompt. The injected preview is generated separately so old rendered schemas do not need to be saved in the base prompt.",
+            "inject": "Inject",
+            "injectedPreview": "Injected CustomDB Prompt Preview",
+            "centralSchema": "Central CustomDB JSON Schema",
+            "applySchema": "Apply Schema",
+            "mappingTarget": "CustomDB viewer field",
+            "mappingSource": "Extracted JSON source",
+            "notMapped": "Not mapped",
+            "applyMapping": "Apply Mapping",
+            "load": "Load",
+            "ready": "Ready",
+            "save": "Save",
+            "overrideQuestion": "Override the backend settings?",
+            "overrideHelp": "This writes the current settings to earve_settings.json on the backend.",
+            "cancel": "Cancel",
+            "override": "Override",
+            "settingsSaved": "Backend settings saved.",
+            "settingsLoaded": "Settings loaded.",
+            "aiOcr": "AI/OCR",
+            "backendBaseUrl": "Backend Base URL",
+            "primaryAiProvider": "Primary AI Provider (The Brain)",
+            "providerOpenAiCompatible": "OpenAI-Compatible API",
+            "providerLmStudio": "LM Studio (Local Server)",
+            "openAiBaseUrl": "OpenAI-Compatible Base URL",
+            "openAiApiKey": "OpenAI-Compatible API Key",
+            "selectModel": "Select Model",
+            "selectProbedModel": "Select probed model",
+            "probe": "Probe",
+            "localServerUrl": "Local Server URL",
+            "selectLlmModel": "Select LLM Model (Brain)",
+            "ocrPreProcessing": "OCR Pre-Processing (The Eyes)",
+            "ocrNoneVision": "None (Vision Mode)",
+            "ocrGoogleVision": "Google Cloud Vision",
+            "ocrLmStudioVlm": "LM Studio Local VLM",
+            "googleCloudApiKey": "Google Cloud API Key",
+            "localVlmModel": "Local VLM Model",
+            "extractXmlMode": "XML Mode",
+            "extractCustomDbMode": "CustomDB Mode",
+            "extractDynamicMode": "Dynamic Mode",
+            "backendLabel": "Backend",
+            "dynamicPrompt": "Dynamic Prompt",
+            "ocrPrompt": "OCR Prompt",
+            "regNum": "Reg",
+            "vatNum": "KM/VAT",
+            "vat": "VAT/KM",
+            "customDbSchemaObjectError": "CustomDB schema must be a JSON object.",
+            "schemaJsonError": "Schema JSON error",
+            "mappingError": "Mapping error",
+            "promptPreviewFailed": "Backend prompt preview failed",
+            "saveFailed": "Save failed",
+            "settingsJsonObjectError": "Settings file must contain a JSON object.",
+            "loadFailed": "Load failed",
+            "bootstrapReturned": "Bootstrap returned an error from",
+            "bootstrapFailedAt": "Bootstrap failed at",
+            "bootstrapUnable": "Unable to load settings bootstrap from backend.",
+            "submittingJob": "Submitting job...",
+            "queued": "Queued",
+            "extractRequestFailed": "Extract request failed",
+            "jobFailed": "Job failed",
+            "customDbInvalidJson": "Completed CustomDB job did not return valid JSON. Raw response was opened in Arbitrary Data.",
+            "documentData": "Document Data",
+            "itemsSection": "Items",
+            "noItemsAdded": "No items added.",
+            "itemNumber": "Item",
+            "summaryTotals": "Summary / Totals",
+            "vatRate": "VAT/KM Rate",
+            "iban1": "IBAN 1",
+            "iban2": "IBAN 2",
+            "templateEmpty": "Template file is empty.",
+            "templateLoadFailed": "Template load failed",
+            "fatalStartupError": "Failed to load the CustomDB viewer template. Start the app through serverstart.bat and check frontend/customdb-viewer.html."
+          },
+          "et": {
+            "appTitle": "Dokumendi konverter",
+            "appSubtitle": "REST backend ja tööde järjekord",
+            "settings": "AI ja promptid",
+            "document": "Dokument",
+            "dropDocument": "Lohista dokument siia",
+            "remove": "Eemalda",
+            "reset": "Lähtesta",
+            "processing": "Töötleb...",
+            "extractData": "Eralda andmed",
+            "error": "Viga",
+            "currentJob": "Praegune töö",
+            "jobMonitor": "Tööde monitor",
+            "refresh": "Värskenda",
+            "loadResult": "Laadi tulemus",
+            "xmlMode": "XML režiim",
+            "customDbMode": "CustomDB eelvaade",
+            "dynamicMode": "Vabad andmed",
+            "xmlJson": "XML režiimi JSON",
+            "exportJson": "Ekspordi JSON",
+            "exportTxt": "Ekspordi TXT",
+            "visualPreview": "DB eelvaade",
+            "openTemplate": "Ava mall",
+            "defaultTemplate": "Vaikemall",
+            "defaultTemplateName": "Vaikimisi avalik mall",
+            "templateLoaded": "Laaditud mall",
+            "invoiceTitle": "Arve",
+            "buyer": "Ostja",
+            "seller": "Müüja",
+            "buyerShort": "Ostja",
+            "sellerShort": "Müüja",
+            "buyerName": "Ostja nimi",
+            "buyerAddress": "Ostja aadress",
+            "sellerName": "Müüja nimi",
+            "sellerAddress": "Müüja aadress",
+            "bank1": "Pank 1",
+            "bank2": "Pank 2",
+            "docNum": "Arve nr",
+            "refNum": "Viitenumber",
+            "docDate": "Kuupäev",
+            "dueDate": "Tähtaeg",
+            "lineTitle": "Nimetus / kirjeldus",
+            "code": "Kood",
+            "unit": "Ühik",
+            "qty": "Kogus",
+            "price": "Hind",
+            "itemSum": "Summa",
+            "total": "Kokku",
+            "addLineItem": "Lisa rida",
+            "description": "Leping / kirjeldus",
+            "sourceFile": "Lähtefail",
+            "itemsSum": "Ridade summa",
+            "round": "Ümardus",
+            "totalEur": "KOKKU (EUR)",
+            "additionalItemFields": "Lisaväljad ridadel",
+            "additionalCustomDbFields": "CustomDB lisaväljad",
+            "line": "Rida",
+            "dynamicLines": "Vabad read",
+            "filterDuplicates": "Filtreeri duplikaadid",
+            "settingsTitle": "AI seadistused ja promptid",
+            "prompts": "Promptid",
+            "xmlPrompt": "XML režiimi prompt",
+            "customDbSchema": "CustomDB skeem",
+            "mapping": "JSON mapping",
+            "customDbBasePrompt": "CustomDB põhiprompt",
+            "promptMarkerNote": "Skeemi marker {{CUSTOMDB_SCHEMA_JSON}} puudub põhipromptist. Backend lisab skeemi süstimise ajal lõppu, kuid marker näitab täpselt, kuhu see kuulub.",
+            "promptMarkerTooltip": "Kasuta põhipromptis markerit {{CUSTOMDB_SCHEMA_JSON}}. Süstitud eelvaade luuakse eraldi, seega vanu renderdatud skeeme ei pea põhiprompti salvestama.",
+            "inject": "Sisesta",
+            "injectedPreview": "Süstitud CustomDB prompti eelvaade",
+            "centralSchema": "Keskne CustomDB JSON skeem",
+            "applySchema": "Rakenda skeem",
+            "mappingTarget": "CustomDB vaataja väli",
+            "mappingSource": "Ekstraheeritud JSON allikas",
+            "notMapped": "Pole seotud",
+            "applyMapping": "Rakenda mapping",
+            "load": "Laadi",
+            "ready": "Valmis",
+            "save": "Salvesta",
+            "overrideQuestion": "Kirjutan backend seaded üle?",
+            "overrideHelp": "Praegused seaded salvestatakse backendis faili earve_settings.json.",
+            "cancel": "Tühista",
+            "override": "Kirjuta üle",
+            "settingsSaved": "Backend seaded salvestatud.",
+            "settingsLoaded": "Seaded laaditud.",
+            "aiOcr": "AI/OCR",
+            "backendBaseUrl": "Backendi põhi-URL",
+            "primaryAiProvider": "Peamine AI teenus",
+            "providerOpenAiCompatible": "OpenAI-ühilduv API",
+            "providerLmStudio": "LM Studio (kohalik server)",
+            "openAiBaseUrl": "OpenAI-ühilduv põhi-URL",
+            "openAiApiKey": "OpenAI-ühilduv API võti",
+            "selectModel": "Vali mudel",
+            "selectProbedModel": "Vali leitud mudel",
+            "probe": "Kontrolli",
+            "localServerUrl": "Kohaliku serveri URL",
+            "selectLlmModel": "Vali LLM mudel",
+            "ocrPreProcessing": "OCR eeltöötlus",
+            "ocrNoneVision": "Puudub (vision režiim)",
+            "ocrGoogleVision": "Google Cloud Vision",
+            "ocrLmStudioVlm": "LM Studio kohalik VLM",
+            "googleCloudApiKey": "Google Cloud API võti",
+            "localVlmModel": "Kohalik VLM mudel",
+            "extractXmlMode": "XML režiim",
+            "extractCustomDbMode": "CustomDB režiim",
+            "extractDynamicMode": "Vaba režiim",
+            "backendLabel": "Backend",
+            "dynamicPrompt": "Vaba režiimi prompt",
+            "ocrPrompt": "OCR prompt",
+            "regNum": "Reg",
+            "vatNum": "KM/VAT",
+            "vat": "KM/VAT",
+            "customDbSchemaObjectError": "CustomDB skeem peab olema JSON objekt.",
+            "schemaJsonError": "Skeemi JSON viga",
+            "mappingError": "Mappingu viga",
+            "promptPreviewFailed": "Backendi prompti eelvaade ebaõnnestus",
+            "saveFailed": "Salvestamine ebaõnnestus",
+            "settingsJsonObjectError": "Seadete fail peab sisaldama JSON objekti.",
+            "loadFailed": "Laadimine ebaõnnestus",
+            "bootstrapReturned": "Bootstrap tagastas vea aadressilt",
+            "bootstrapFailedAt": "Bootstrap ebaõnnestus aadressil",
+            "bootstrapUnable": "Backendi seadete laadimine ebaõnnestus.",
+            "submittingJob": "Saadan töö...",
+            "queued": "Järjekorras",
+            "extractRequestFailed": "Andmete eraldamise päring ebaõnnestus",
+            "jobFailed": "Töö ebaõnnestus",
+            "customDbInvalidJson": "Lõpetatud CustomDB töö ei tagastanud korrektset JSON-i. Toorvastus avati vabade andmete vaates.",
+            "documentData": "Dokumendi andmed",
+            "itemsSection": "Read",
+            "noItemsAdded": "Ridu pole lisatud.",
+            "itemNumber": "Rida",
+            "summaryTotals": "Kokkuvõte / summad",
+            "vatRate": "KM/VAT määr",
+            "iban1": "IBAN 1",
+            "iban2": "IBAN 2",
+            "templateEmpty": "Mallifail on tühi.",
+            "templateLoadFailed": "Malli laadimine ebaõnnestus",
+            "fatalStartupError": "CustomDB vaataja malli laadimine ebaõnnestus. Käivita rakendus serverstart.bat ja kontrolli faili frontend/customdb-viewer.html."
+          },
+          "ru": {
+            "appTitle": "Конвертер документов",
+            "appSubtitle": "REST backend и очередь задач",
+            "settings": "AI и промпты",
+            "document": "Документ",
+            "dropDocument": "Перетащите документ сюда",
+            "remove": "Удалить",
+            "reset": "Сброс",
+            "processing": "Обработка...",
+            "extractData": "Извлечь данные",
+            "error": "Ошибка",
+            "currentJob": "Текущая задача",
+            "jobMonitor": "Монитор задач",
+            "refresh": "Обновить",
+            "loadResult": "Загрузить результат",
+            "xmlMode": "XML режим",
+            "customDbMode": "Просмотр CustomDB",
+            "dynamicMode": "Произвольные данные",
+            "xmlJson": "JSON XML режима",
+            "exportJson": "Экспорт JSON",
+            "exportTxt": "Экспорт TXT",
+            "visualPreview": "Просмотр БД",
+            "openTemplate": "Открыть шаблон",
+            "defaultTemplate": "Шаблон по умолчанию",
+            "defaultTemplateName": "Публичный шаблон по умолчанию",
+            "templateLoaded": "Загружен шаблон",
+            "invoiceTitle": "Счет",
+            "buyer": "Покупатель",
+            "seller": "Продавец",
+            "buyerShort": "Покупатель",
+            "sellerShort": "Продавец",
+            "buyerName": "Имя покупателя",
+            "buyerAddress": "Адрес покупателя",
+            "sellerName": "Имя продавца",
+            "sellerAddress": "Адрес продавца",
+            "bank1": "Банк 1",
+            "bank2": "Банк 2",
+            "docNum": "№ счета",
+            "refNum": "Ссылка",
+            "docDate": "Дата",
+            "dueDate": "Срок оплаты",
+            "lineTitle": "Название / описание",
+            "code": "Код",
+            "unit": "Ед.",
+            "qty": "Кол-во",
+            "price": "Цена",
+            "itemSum": "Сумма",
+            "total": "Итого",
+            "addLineItem": "Добавить строку",
+            "description": "Договор / описание",
+            "sourceFile": "Исходный файл",
+            "itemsSum": "Сумма строк",
+            "round": "Округление",
+            "totalEur": "ИТОГО (EUR)",
+            "additionalItemFields": "Доп. поля строк",
+            "additionalCustomDbFields": "Доп. поля CustomDB",
+            "line": "Строка",
+            "dynamicLines": "Произвольные строки",
+            "filterDuplicates": "Фильтровать дубликаты",
+            "settingsTitle": "Настройки AI и промпты",
+            "prompts": "Промпты",
+            "xmlPrompt": "Промпт XML режима",
+            "customDbSchema": "Схема CustomDB",
+            "mapping": "JSON mapping",
+            "customDbBasePrompt": "Базовый промпт CustomDB",
+            "promptMarkerNote": "Маркер схемы {{CUSTOMDB_SCHEMA_JSON}} отсутствует в базовом промпте. Backend добавит схему при подстановке, но маркер показывает точное место вставки.",
+            "promptMarkerTooltip": "Используйте {{CUSTOMDB_SCHEMA_JSON}} в базовом промпте. Предпросмотр с подстановкой создается отдельно, поэтому старые сгенерированные схемы не нужно сохранять в базовом промпте.",
+            "inject": "Вставить",
+            "injectedPreview": "Предпросмотр промпта CustomDB с подстановкой",
+            "centralSchema": "Центральная JSON-схема CustomDB",
+            "applySchema": "Применить схему",
+            "mappingTarget": "Поле просмотра CustomDB",
+            "mappingSource": "Источник извлеченного JSON",
+            "notMapped": "Не связано",
+            "applyMapping": "Применить mapping",
+            "load": "Загрузить",
+            "ready": "Готово",
+            "save": "Сохранить",
+            "overrideQuestion": "Перезаписать настройки backend?",
+            "overrideHelp": "Текущие настройки будут записаны backend-ом в файл earve_settings.json.",
+            "cancel": "Отмена",
+            "override": "Перезаписать",
+            "settingsSaved": "Настройки backend сохранены.",
+            "settingsLoaded": "Настройки загружены.",
+            "aiOcr": "AI/OCR",
+            "backendBaseUrl": "URL backend",
+            "primaryAiProvider": "Основной AI провайдер",
+            "providerOpenAiCompatible": "OpenAI-совместимый API",
+            "providerLmStudio": "LM Studio (локальный сервер)",
+            "openAiBaseUrl": "Базовый URL OpenAI-совместимого API",
+            "openAiApiKey": "API ключ OpenAI-совместимого сервиса",
+            "selectModel": "Выберите модель",
+            "selectProbedModel": "Выберите найденную модель",
+            "probe": "Проверить",
+            "localServerUrl": "URL локального сервера",
+            "selectLlmModel": "Выберите LLM модель",
+            "ocrPreProcessing": "OCR предобработка",
+            "ocrNoneVision": "Нет (vision режим)",
+            "ocrGoogleVision": "Google Cloud Vision",
+            "ocrLmStudioVlm": "Локальная VLM в LM Studio",
+            "googleCloudApiKey": "API ключ Google Cloud",
+            "localVlmModel": "Локальная VLM модель",
+            "extractXmlMode": "XML режим",
+            "extractCustomDbMode": "CustomDB режим",
+            "extractDynamicMode": "Свободный режим",
+            "backendLabel": "Backend",
+            "dynamicPrompt": "Промпт свободного режима",
+            "ocrPrompt": "OCR промпт",
+            "regNum": "Рег. №",
+            "vatNum": "KM/VAT",
+            "vat": "VAT/KM",
+            "customDbSchemaObjectError": "Схема CustomDB должна быть JSON объектом.",
+            "schemaJsonError": "Ошибка JSON схемы",
+            "mappingError": "Ошибка mapping",
+            "promptPreviewFailed": "Не удалось создать предпросмотр промпта backend",
+            "saveFailed": "Не удалось сохранить",
+            "settingsJsonObjectError": "Файл настроек должен содержать JSON объект.",
+            "loadFailed": "Не удалось загрузить",
+            "bootstrapReturned": "Bootstrap вернул ошибку из",
+            "bootstrapFailedAt": "Bootstrap не удался по адресу",
+            "bootstrapUnable": "Не удалось загрузить настройки из backend.",
+            "submittingJob": "Отправка задачи...",
+            "queued": "В очереди",
+            "extractRequestFailed": "Запрос извлечения данных не удался",
+            "jobFailed": "Задача завершилась ошибкой",
+            "customDbInvalidJson": "Завершенная задача CustomDB не вернула корректный JSON. Сырой ответ открыт в режиме произвольных данных.",
+            "documentData": "Данные документа",
+            "itemsSection": "Строки",
+            "noItemsAdded": "Строки не добавлены.",
+            "itemNumber": "Строка",
+            "summaryTotals": "Итоги / суммы",
+            "vatRate": "Ставка VAT/KM",
+            "iban1": "IBAN 1",
+            "iban2": "IBAN 2",
+            "templateEmpty": "Файл шаблона пустой.",
+            "templateLoadFailed": "Не удалось загрузить шаблон",
+            "fatalStartupError": "Не удалось загрузить шаблон просмотра CustomDB. Запустите приложение через serverstart.bat и проверьте frontend/customdb-viewer.html."
+          }
+        };
+
+        let currentLangs = [];
+
+        // Initialize App
+        window.onload = () => {
+            loadJSONToTable(initialData);
+        };
+
+        function loadJSONToTable(data) {
+            currentLangs = Object.keys(data);
+            if (currentLangs.length === 0) return alert("JSON has no language keys.");
+
+            // Extract all unique translation keys across all languages
+            const allKeys = new Set();
+            currentLangs.forEach(lang => {
+                Object.keys(data[lang]).forEach(key => allKeys.add(key));
+            });
+
+            // Setup Header
+            const thead = document.getElementById('table-header');
+            thead.innerHTML = `<th style="width: 20%;">Translation Key</th>`;
+            currentLangs.forEach(lang => {
+                thead.innerHTML += `<th>${lang.toUpperCase()}</th>`;
+            });
+            thead.innerHTML += `<th class="action-cell">Del</th>`;
+
+            // Setup Body
+            const tbody = document.getElementById('editor-body');
+            tbody.innerHTML = '';
+            
+            allKeys.forEach(key => {
+                const tr = createRow(key, data);
+                tbody.appendChild(tr);
+            });
+        }
+
+        function createRow(keyName, dataObj = null) {
+            const tr = document.createElement('tr');
+            
+            // Key Input
+            let html = `<td><input type="text" class="key-input" value="${keyName}" placeholder="e.g. appTitle"></td>`;
+            
+            // Language Textareas
+            currentLangs.forEach(lang => {
+                const val = (dataObj && dataObj[lang] && dataObj[lang][keyName]) ? dataObj[lang][keyName] : '';
+                // calculate lines for better default height
+                const lines = val.split('\n').length;
+                const rows = Math.max(1, Math.min(lines, 4));
+                
+                // We escape html entities to prevent input breakage
+                const safeVal = val.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                html += `<td><textarea class="lang-input" data-lang="${lang}" rows="${rows}">${safeVal}</textarea></td>`;
+            });
+
+            // Delete Button
+            html += `<td class="action-cell"><button class="danger" onclick="this.closest('tr').remove()" title="Delete Row">✕</button></td>`;
+            
+            tr.innerHTML = html;
+            return tr;
+        }
+
+        function addNewRow() {
+            if(currentLangs.length === 0) return alert("Please import a JSON first.");
+            const tbody = document.getElementById('editor-body');
+            const tr = createRow('');
+            tbody.insertBefore(tr, tbody.firstChild);
+            tr.querySelector('.key-input').focus();
+        }
+
+        function exportJSON() {
+            const result = {};
+            // Initialize language objects
+            currentLangs.forEach(lang => { result[lang] = {}; });
+
+            // Read table DOM to construct JSON
+            const rows = document.querySelectorAll('#editor-body tr');
+            rows.forEach(row => {
+                const keyInput = row.querySelector('.key-input');
+                const key = keyInput.value.trim();
+                
+                if (!key) return; // skip empty keys
+
+                currentLangs.forEach(lang => {
+                    const langInput = row.querySelector(`.lang-input[data-lang="${lang}"]`);
+                    // Only add if not entirely empty to keep JSON clean, or keep it if you prefer. 
+                    // Let's keep it to ensure structure matches.
+                    result[lang][key] = langInput.value; 
+                });
+            });
+
+            // Trigger Download
+            const dataStr = JSON.stringify(result, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "i18n.json";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function importJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    loadJSONToTable(data);
+                    document.getElementById('search').value = ''; // Reset search
+                } catch (err) {
+                    alert("Invalid JSON file!\n" + err);
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = ''; // Reset file input
+        }
+
+        function filterTable() {
+            const query = document.getElementById('search').value.toLowerCase();
+            const rows = document.querySelectorAll('#editor-body tr');
+            
+            rows.forEach(row => {
+                const inputs = row.querySelectorAll('input, textarea');
+                let match = false;
+                inputs.forEach(input => {
+                    if (input.value.toLowerCase().includes(query)) {
+                        match = true;
+                    }
+                });
+                row.style.display = match ? '' : 'none';
+            });
+        }
+    </script>
+</body>
+</html>

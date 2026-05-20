@@ -173,8 +173,12 @@
     <div v-if="settingsTab === 'ai'">
         <div class="mb-4"><label class="block text-sm font-bold mb-1">{{ t('backendBaseUrl') }}</label><input type="text" v-model="backendBase" class="w-full border p-2 rounded font-mono"></div>
         <div class="mb-6">
-            <label class="block text-sm font-bold mb-1 text-gray-700">{{ t('primaryAiProvider') }}</label>
-            <select v-model="settings.provider" class="w-full border p-2 rounded bg-gray-50"><option value="openai">{{ t('providerOpenAiCompatible') }}</option><option value="lmstudio">{{ t('providerLmStudio') }}</option></select>
+            <label class="block text-sm font-bold mb-1 text-gray-700">{{ t('llmProvider') }}</label>
+            <select v-model="settings.provider" class="w-full border p-2 rounded bg-gray-50"><option value="ollama">{{ t('providerOllama') }}</option><option value="lmstudio">{{ t('providerLmStudio') }}</option><option value="openai">{{ t('providerOpenAiCompatible') }}</option></select>
+        </div>
+        <div v-if="settings.provider === 'ollama'" class="mb-6 p-4 border rounded bg-emerald-50">
+            <div class="mb-4"><label class="block text-sm font-bold mb-1">{{ t('ollamaBaseUrl') }}</label><input type="text" v-model="settings.ollamaUrl" class="w-full border p-2 rounded font-mono"></div>
+            <div><label class="block text-sm font-bold mb-1">{{ t('ollamaModel') }}</label><div class="flex gap-2"><input v-if="!availableOllamaModels.length" type="text" v-model="settings.ollamaModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-else v-model="settings.ollamaModel" class="flex-1 border p-2 rounded bg-white font-mono text-sm"><option v-if="settings.ollamaModel && !modelListHas(availableOllamaModels, settings.ollamaModel)" :value="settings.ollamaModel">{{ settings.ollamaModel }}</option><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableOllamaModels" :key="m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeOllamaModels" :disabled="isProbingModels" class="px-4 py-2 bg-emerald-600 text-white rounded">{{ t('probe') }}</button></div></div>
         </div>
         <div v-if="settings.provider === 'openai'" class="mb-6 p-4 border rounded bg-indigo-50">
             <div class="mb-4"><label class="block text-sm font-bold mb-1">{{ t('openAiBaseUrl') }}</label><input type="text" v-model="settings.openAiBaseUrl" class="w-full border p-2 rounded font-mono"></div>
@@ -187,9 +191,22 @@
         </div>
         <div class="mb-6 p-4 border rounded bg-gray-100">
           <h3 class="font-bold text-gray-800 mb-2">{{ t('ocrPreProcessing') }}</h3>
-          <select v-model="settings.ocrMode" class="w-full border p-2 rounded bg-white text-sm mb-3"><option value="none">{{ t('ocrNoneVision') }}</option><option value="google">{{ t('ocrGoogleVision') }}</option><option value="lmstudio_vlm">{{ t('ocrLmStudioVlm') }}</option></select>
-          <div v-if="settings.ocrMode === 'google'" class="ml-2 pl-4 border-l-2 border-blue-400"><label class="block text-xs font-bold mb-1">{{ t('googleCloudApiKey') }}</label><input type="password" v-model="settings.googleVisionKey" class="w-full border p-2 rounded font-mono text-sm"></div>
-          <div v-if="settings.ocrMode === 'lmstudio_vlm'" class="ml-2 pl-4 border-l-2 border-purple-400"><label class="block text-xs font-bold mb-1">{{ t('localVlmModel') }}</label><input v-if="!availableLMStudioModels.length" type="text" v-model="settings.ocrLmStudioModel" class="w-full border p-2 rounded font-mono text-sm"><select v-else v-model="settings.ocrLmStudioModel" class="w-full border p-2 rounded bg-white font-mono text-sm"><option v-if="settings.ocrLmStudioModel && !modelListHas(availableLMStudioModels, settings.ocrLmStudioModel)" :value="settings.ocrLmStudioModel">{{ settings.ocrLmStudioModel }}</option><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableLMStudioModels" :key="'ocr-' + m.id" :value="m.id">{{ m.name || m.id }}</option></select></div>
+          <label class="block text-xs font-bold mb-1">{{ t('ocrProvider') }}</label>
+          <select v-model="settings.ocrProvider" class="w-full border p-2 rounded bg-white text-sm mb-3"><option value="none">{{ t('ocrProviderNone') }}</option><option value="google">{{ t('ocrProviderGoogle') }}</option><option value="ollama">{{ t('ocrProviderOllama') }}</option><option value="lmstudio">{{ t('ocrProviderLmStudio') }}</option><option value="openai">{{ t('ocrProviderOpenAi') }}</option></select>
+          <div v-if="settings.ocrProvider === 'google'" class="ml-2 pl-4 border-l-2 border-blue-400"><label class="block text-xs font-bold mb-1">{{ t('googleCloudApiKey') }}</label><input type="password" v-model="settings.googleVisionKey" class="w-full border p-2 rounded font-mono text-sm"></div>
+          <div v-if="settings.ocrProvider === 'ollama'" class="ml-2 pl-4 border-l-2 border-emerald-400 space-y-3">
+            <div><label class="block text-xs font-bold mb-1">{{ t('ocrOllamaBaseUrl') }}</label><input type="text" v-model="settings.ocrOllamaUrl" class="w-full border p-2 rounded font-mono text-sm"></div>
+            <div><label class="block text-xs font-bold mb-1">{{ t('ocrOllamaModel') }}</label><div class="flex gap-2"><input v-if="!availableOcrOllamaModels.length" type="text" v-model="settings.ocrOllamaModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-else v-model="settings.ocrOllamaModel" class="flex-1 border p-2 rounded bg-white font-mono text-sm"><option v-if="settings.ocrOllamaModel && !modelListHas(availableOcrOllamaModels, settings.ocrOllamaModel)" :value="settings.ocrOllamaModel">{{ settings.ocrOllamaModel }}</option><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableOcrOllamaModels" :key="'ocr-ollama-' + m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeOcrOllamaModels" :disabled="isProbingModels" class="px-4 py-2 bg-emerald-600 text-white rounded">{{ t('probe') }}</button></div></div>
+          </div>
+          <div v-if="settings.ocrProvider === 'lmstudio'" class="ml-2 pl-4 border-l-2 border-purple-400 space-y-3">
+            <div><label class="block text-xs font-bold mb-1">{{ t('ocrLmStudioBaseUrl') }}</label><input type="text" v-model="settings.ocrLmStudioUrl" class="w-full border p-2 rounded font-mono text-sm"></div>
+            <div><label class="block text-xs font-bold mb-1">{{ t('ocrLmStudioModel') }}</label><div class="flex gap-2"><input v-if="!availableOcrLMStudioModels.length" type="text" v-model="settings.ocrLmStudioModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-else v-model="settings.ocrLmStudioModel" class="flex-1 border p-2 rounded bg-white font-mono text-sm"><option v-if="settings.ocrLmStudioModel && !modelListHas(availableOcrLMStudioModels, settings.ocrLmStudioModel)" :value="settings.ocrLmStudioModel">{{ settings.ocrLmStudioModel }}</option><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableOcrLMStudioModels" :key="'ocr-lms-' + m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeOcrLMStudioModels" :disabled="isProbingModels" class="px-4 py-2 bg-purple-600 text-white rounded">{{ t('probe') }}</button></div></div>
+          </div>
+          <div v-if="settings.ocrProvider === 'openai'" class="ml-2 pl-4 border-l-2 border-indigo-400 space-y-3">
+            <div><label class="block text-xs font-bold mb-1">{{ t('ocrOpenAiBaseUrl') }}</label><input type="text" v-model="settings.ocrOpenAiBaseUrl" class="w-full border p-2 rounded font-mono text-sm"></div>
+            <div><label class="block text-xs font-bold mb-1">{{ t('ocrOpenAiApiKey') }}</label><input type="password" v-model="settings.ocrOpenAiKey" class="w-full border p-2 rounded font-mono text-sm"></div>
+            <div><label class="block text-xs font-bold mb-1">{{ t('ocrOpenAiModel') }}</label><div class="flex gap-2"><input v-if="!availableOcrOpenAiModels.length" type="text" v-model="settings.ocrOpenAiModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-else v-model="settings.ocrOpenAiModel" class="flex-1 border p-2 rounded bg-white font-mono text-sm"><option v-if="settings.ocrOpenAiModel && !modelListHas(availableOcrOpenAiModels, settings.ocrOpenAiModel)" :value="settings.ocrOpenAiModel">{{ settings.ocrOpenAiModel }}</option><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableOcrOpenAiModels" :key="'ocr-openai-' + m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeOcrOpenAiModels" :disabled="isProbingModels" class="px-4 py-2 bg-indigo-600 text-white rounded">{{ t('probe') }}</button></div></div>
+          </div>
         </div>
     </div>
     <div v-if="settingsTab === 'prompts'" class="space-y-3">
@@ -327,8 +344,8 @@ const app = createApp({
       showSettings:false,showOverrideConfirm:false,settingsTab:'ai',settingsError:'',isProcessing:false,ocrStatus:'',errorMsg:'',
       filePreview:null,fileName:'',fileObj:null,currentJob:null,
       zoomLevel:1,panX:0,panY:0,isDragging:false,startX:0,startY:0,
-      activeTab:'customdb',availableOpenAiModels:[],availableLMStudioModels:[],isProbingModels:false,
-      settings: { provider:'openai', openAiBaseUrl:'https://api.openai.com/v1', openAiKey:'', openAiModel:'gpt-4o-mini', lmStudioUrl:'http://localhost:1234', lmStudioModel:'', ocrMode:'none', googleVisionKey:'', ocrLmStudioModel:'', xmlPrompt:'', customDbPrompt:'', dynamicPrompt:'', ocrPrompt:'', customDbSchema: JSON.parse(JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA)), customJsonMapping:{}, pipelineSettings:{mode:'customdb'} },
+      activeTab:'customdb',availableOpenAiModels:[],availableOllamaModels:[],availableLMStudioModels:[],availableOcrOpenAiModels:[],availableOcrOllamaModels:[],availableOcrLMStudioModels:[],isProbingModels:false,
+      settings: { provider:'openai', openAiBaseUrl:'https://api.openai.com/v1', openAiKey:'', openAiModel:'gpt-4o-mini', ollamaUrl:'http://localhost:11434/v1', ollamaModel:'', lmStudioUrl:'http://localhost:1234', lmStudioModel:'', ocrProvider:'none', ocrMode:'none', googleVisionKey:'', ocrOpenAiBaseUrl:'https://api.openai.com/v1', ocrOpenAiKey:'', ocrOpenAiModel:'', ocrOllamaUrl:'http://localhost:11434/v1', ocrOllamaModel:'', ocrLmStudioUrl:'http://localhost:1234', ocrLmStudioModel:'', maxTokens:2048, ollamaMaxTokens:8192, ocrMaxTokens:4096, ocrOllamaMaxTokens:8192, xmlPrompt:'', customDbPrompt:'', dynamicPrompt:'', ocrPrompt:'', customDbSchema: JSON.parse(JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA)), customJsonMapping:{}, pipelineSettings:{mode:'customdb'} },
       schemaDraft: JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA, null, 2),
       mappingDraft: '{}',
       mappingModel:{},
@@ -455,6 +472,19 @@ const app = createApp({
     normalizeMode(mode) {
       return mode || 'customdb';
     },
+    normalizeProvider(provider) {
+      if (provider === 'openai_compatible') return 'openai';
+      return ['ollama', 'lmstudio', 'openai'].includes(provider) ? provider : 'openai';
+    },
+    normalizeOcrProvider(settings) {
+      const provider = settings && settings.ocrProvider;
+      const legacy = settings && settings.ocrMode;
+      const legacyMap = { none:'none', google:'google', lmstudio_vlm:'lmstudio', ollama_vlm:'ollama', openai_vlm:'openai' };
+      const legacyProvider = legacyMap[legacy] || 'none';
+      if (provider === 'none' && legacyProvider !== 'none') return legacyProvider;
+      if (['none', 'google', 'ollama', 'lmstudio', 'openai'].includes(provider)) return provider;
+      return legacyProvider;
+    },
     isCustomDbMode(mode) {
       return this.normalizeMode(mode) === 'customdb';
     },
@@ -546,6 +576,19 @@ const app = createApp({
       return raw !== undefined && raw !== null ? raw : base;
     },
     syncSettingsDrafts() {
+      this.settings.provider = this.normalizeProvider(this.settings.provider);
+      this.settings.ocrProvider = this.normalizeOcrProvider(this.settings);
+      this.settings.ocrMode = this.settings.ocrProvider;
+      if (!this.settings.ollamaUrl) this.settings.ollamaUrl = 'http://localhost:11434/v1';
+      if (!this.settings.ocrOllamaUrl) this.settings.ocrOllamaUrl = this.settings.ollamaUrl || 'http://localhost:11434/v1';
+      if (!this.settings.ocrLmStudioUrl) this.settings.ocrLmStudioUrl = this.settings.lmStudioUrl || 'http://localhost:1234';
+      if (!this.settings.ocrOpenAiBaseUrl) this.settings.ocrOpenAiBaseUrl = this.settings.openAiBaseUrl || 'https://api.openai.com/v1';
+      if (!this.settings.ocrOpenAiKey) this.settings.ocrOpenAiKey = this.settings.openAiKey || '';
+      if (!this.settings.ocrOpenAiModel) this.settings.ocrOpenAiModel = this.settings.openAiModel || '';
+      if (!Number.isFinite(Number(this.settings.maxTokens)) || Number(this.settings.maxTokens) <= 0) this.settings.maxTokens = 2048;
+      if (!Number.isFinite(Number(this.settings.ollamaMaxTokens)) || Number(this.settings.ollamaMaxTokens) <= 0) this.settings.ollamaMaxTokens = 8192;
+      if (!Number.isFinite(Number(this.settings.ocrMaxTokens)) || Number(this.settings.ocrMaxTokens) <= 0) this.settings.ocrMaxTokens = 4096;
+      if (!Number.isFinite(Number(this.settings.ocrOllamaMaxTokens)) || Number(this.settings.ocrOllamaMaxTokens) <= 0) this.settings.ocrOllamaMaxTokens = 8192;
       if (!this.isPlainObject(this.settings.customDbSchema)) this.settings.customDbSchema = this.clone(DEFAULT_CUSTOMDB_SCHEMA);
       if (!this.isPlainObject(this.settings.customJsonMapping)) this.settings.customJsonMapping = {};
       if (!this.isPlainObject(this.settings.pipelineSettings)) this.settings.pipelineSettings = { mode: this.activeTab || 'customdb' };
@@ -598,6 +641,9 @@ const app = createApp({
     },
     applyDraftSettings() {
       if (!this.isPlainObject(this.settings.pipelineSettings)) this.settings.pipelineSettings = {};
+      this.settings.provider = this.normalizeProvider(this.settings.provider);
+      this.settings.ocrProvider = this.normalizeOcrProvider(this.settings);
+      this.settings.ocrMode = this.settings.ocrProvider;
       this.settings.pipelineSettings.mode = this.normalizeMode(this.activeTab);
       delete this.settings.filterDuplicates;
       return this.applySchemaDraft() && this.applyMappingDraft();
@@ -704,12 +750,44 @@ const app = createApp({
         this.availableOpenAiModels = await r.json();
       } catch(e) {} finally { this.isProbingModels = false; }
     },
+    async probeOllamaModels() {
+      this.isProbingModels = true;
+      try {
+        const r = await fetch(`${this.apiBase()}/api/probe/ollama`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ollamaUrl:this.settings.ollamaUrl }) });
+        if (!r.ok) throw new Error('Probe failed');
+        this.availableOllamaModels = await r.json();
+      } catch(e) {} finally { this.isProbingModels = false; }
+    },
     async probeLMStudioModels() {
       this.isProbingModels = true;
       try {
         const r = await fetch(`${this.apiBase()}/api/probe/lmstudio`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ lmStudioUrl:this.settings.lmStudioUrl }) });
         if (!r.ok) throw new Error('Probe failed');
         this.availableLMStudioModels = await r.json();
+      } catch(e) {} finally { this.isProbingModels = false; }
+    },
+    async probeOcrOpenAiModels() {
+      this.isProbingModels = true;
+      try {
+        const r = await fetch(`${this.apiBase()}/api/probe/openai`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ openAiBaseUrl:this.settings.ocrOpenAiBaseUrl, openAiKey:this.settings.ocrOpenAiKey }) });
+        if (!r.ok) throw new Error('Probe failed');
+        this.availableOcrOpenAiModels = await r.json();
+      } catch(e) {} finally { this.isProbingModels = false; }
+    },
+    async probeOcrOllamaModels() {
+      this.isProbingModels = true;
+      try {
+        const r = await fetch(`${this.apiBase()}/api/probe/ollama`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ollamaUrl:this.settings.ocrOllamaUrl }) });
+        if (!r.ok) throw new Error('Probe failed');
+        this.availableOcrOllamaModels = await r.json();
+      } catch(e) {} finally { this.isProbingModels = false; }
+    },
+    async probeOcrLMStudioModels() {
+      this.isProbingModels = true;
+      try {
+        const r = await fetch(`${this.apiBase()}/api/probe/lmstudio`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ lmStudioUrl:this.settings.ocrLmStudioUrl }) });
+        if (!r.ok) throw new Error('Probe failed');
+        this.availableOcrLMStudioModels = await r.json();
       } catch(e) {} finally { this.isProbingModels = false; }
     },
     handleWheel(e) { const z=0.1; if(e.deltaY>0) this.zoomLevel=Math.max(0.5,this.zoomLevel-z); else this.zoomLevel=Math.min(5,this.zoomLevel+z); },
