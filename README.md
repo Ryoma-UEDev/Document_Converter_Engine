@@ -229,6 +229,39 @@ Returns one job.
 }
 ```
 
+### Batch Worker API
+The batch worker is intentionally isolated in `backend/batch_worker.py`. It watches folders on the backend machine, converts supported documents, writes JSON output, and moves source files so they are not processed again.
+
+When a batch run starts, the backend creates a timestamped folder inside `outputDir`, for example `batch_2026-05-21_14-30-00`. Inside that run folder it creates:
+- `output` for converted JSON files
+- `processed` for source files after processing, including failed files
+- `batch.log` for run activity
+- `errors.log` for failed files and error details
+
+Supported input extensions: `.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.tif`, `.tiff`.
+
+Endpoints:
+- `GET /api/batch/status`
+- `POST /api/batch/config`
+- `GET /api/batch/browse?path=C:\Invoices`
+- `POST /api/batch/start`
+- `POST /api/batch/stop`
+- `POST /api/batch/run-once`
+
+Example payload for `start`, `config`, or `run-once`:
+
+```json
+{
+  "inputDir": "C:\\Invoices\\in",
+  "outputDir": "C:\\Invoices\\out",
+  "mode": "customdb",
+  "pollSeconds": 10,
+  "keepInputFiles": false
+}
+```
+
+If `keepInputFiles` is `true`, the worker copies each source file into the run folder's `processed` folder and leaves the source file in `inputDir`. During the same running worker session it remembers already processed file fingerprints so kept files are not immediately processed again.
+
 ### `POST /api/prompt/preview`
 Previews the final prompt with `{{CUSTOMDB_SCHEMA_JSON}}` replaced by the active schema.
 

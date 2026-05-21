@@ -16,6 +16,8 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 import pypdfium2 as pdfium
 
+from backend.batch_worker import BatchWorker
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 SETTINGS_PATH = BASE_DIR / "earve_settings.json"
 FRONTEND_DIR = BASE_DIR / "frontend"
@@ -103,6 +105,13 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "pipelineSettings": {
         "mode": CUSTOMDB_MODE,
     },
+    "batchSettings": {
+        "inputDir": "",
+        "outputDir": "",
+        "mode": CUSTOMDB_MODE,
+        "pollSeconds": 10,
+        "keepInputFiles": False,
+    },
 }
 
 DEFAULT_MAX_TOKENS = 2048
@@ -164,6 +173,14 @@ def normalize_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
     settings["pipelineSettings"]["mode"] = normalize_mode(settings["pipelineSettings"].get("mode"))
     if settings["pipelineSettings"].get("mode") not in VALID_MODES:
         settings["pipelineSettings"]["mode"] = CUSTOMDB_MODE
+    if not isinstance(settings.get("batchSettings"), dict):
+        settings["batchSettings"] = copy.deepcopy(DEFAULT_SETTINGS["batchSettings"])
+    else:
+        for key, value in DEFAULT_SETTINGS["batchSettings"].items():
+            settings["batchSettings"].setdefault(key, value)
+    settings["batchSettings"]["mode"] = normalize_mode(settings["batchSettings"].get("mode"))
+    if settings["batchSettings"].get("mode") not in VALID_MODES:
+        settings["batchSettings"]["mode"] = CUSTOMDB_MODE
     return settings
 
 
@@ -244,15 +261,19 @@ def _pdf_to_jpeg_bytes(raw_bytes: bytes) -> bytes:
     return out.getvalue()
 
 
-def _to_base64_image(upload: UploadFile, raw_bytes: bytes) -> str:
-    content_type = (upload.content_type or "").lower()
-    is_pdf = upload.filename.lower().endswith(".pdf") or "pdf" in content_type
+def _bytes_to_base64_image(file_name: str, content_type: str, raw_bytes: bytes) -> str:
+    content_type = (content_type or "").lower()
+    is_pdf = file_name.lower().endswith(".pdf") or "pdf" in content_type
     if is_pdf:
         raw_bytes = _pdf_to_jpeg_bytes(raw_bytes)
     else:
         # validate image payload is sane for model usage
         Image.open(io.BytesIO(raw_bytes)).verify()
     return base64.b64encode(raw_bytes).decode("ascii")
+
+
+def _to_base64_image(upload: UploadFile, raw_bytes: bytes) -> str:
+    return _bytes_to_base64_image(upload.filename, upload.content_type or "", raw_bytes)
 
 
 def _positive_int(value: Any, default: int) -> int:
@@ -293,6 +314,7 @@ def _openai_chat(
     doc_text: Optional[str],
     max_tokens: int = DEFAULT_MAX_TOKENS,
     label: str = "Model",
+    disable_reasoning: bool = False,
 ) -> str:
     content = [{"type": "text", "text": prompt}]
     if doc_text:
@@ -310,10 +332,28 @@ def _openai_chat(
         "temperature": 0.1,
         "max_tokens": max_tokens,
     }
+    if disable_reasoning:
+        payload["reasoning_effort"] = "none"
     r = requests.post(url, headers=headers, json=payload, timeout=240)
+    if disable_reasoning and r.status_code >= 400 and "reasoning" in r.text.lower():
+        payload["reasoning_effort"] = "false"
+        r = requests.post(url, headers=headers, json=payload, timeout=240)
+    if disable_reasoning and r.status_code >= 400 and "reasoning" in r.text.lower():
+        payload.pop("reasoning_effort", None)
+        payload["messages"][0]["content"][0]["text"] = "/no_think\n" + prompt
+        r = requests.post(url, headers=headers, json=payload, timeout=240)
     r.raise_for_status()
     data = r.json()
-    return _message_text_from_chat_response(data, label)
+    try:
+        return _message_text_from_chat_response(data, label)
+    except ValueError as exc:
+        if disable_reasoning and "returned reasoning but no final content" in str(exc):
+            payload.pop("reasoning_effort", None)
+            payload["messages"][0]["content"][0]["text"] = "/no_think\n" + prompt
+            r = requests.post(url, headers=headers, json=payload, timeout=240)
+            r.raise_for_status()
+            return _message_text_from_chat_response(r.json(), label)
+        raise
 
 
 def _google_ocr(api_key: str, base64_image: str) -> str:
@@ -419,6 +459,7 @@ def _run_chat_provider(settings: Dict[str, Any], prompt: str, base64_image: Opti
             doc_text,
             _positive_int(settings.get("ollamaMaxTokens"), DEFAULT_OLLAMA_MAX_TOKENS),
             "Ollama extraction model",
+            True,
         )
     if provider == "lmstudio":
         lm_url = settings.get("lmStudioUrl", "http://localhost:1234").rstrip("/")
@@ -458,6 +499,7 @@ def _run_vlm_ocr(settings: Dict[str, Any], base64_image: str) -> str:
             None,
             _positive_int(settings.get("ocrOllamaMaxTokens"), DEFAULT_OCR_OLLAMA_MAX_TOKENS),
             "Ollama OCR model",
+            True,
         )
     if ocr_provider == "lmstudio":
         lm_url = settings.get("ocrLmStudioUrl") or settings.get("lmStudioUrl", "http://localhost:1234")
@@ -485,42 +527,57 @@ def _run_vlm_ocr(settings: Dict[str, Any], base64_image: str) -> str:
     raise ValueError(f"Unsupported OCR provider: {ocr_provider}")
 
 
+def _run_conversion(mode: str, base64_image: str, settings: Dict[str, Any]) -> Dict[str, Any]:
+    prompt = _extract_mode_prompt(mode, settings)
+    doc_text: Optional[str] = None
+    raw_ocr = ""
+
+    ocr_provider = normalize_ocr_provider(settings)
+    if ocr_provider == "google":
+        raw_ocr = _google_ocr(settings.get("googleVisionKey", ""), base64_image)
+        doc_text = raw_ocr
+    elif ocr_provider in ("ollama", "lmstudio", "openai"):
+        raw_ocr = _run_vlm_ocr(settings, base64_image)
+        doc_text = raw_ocr
+
+    out = _run_chat_provider(settings, prompt, None if doc_text else base64_image, doc_text)
+
+    parsed: Any = out
+    if mode in (XML_MODE, CUSTOMDB_MODE):
+        s = out.find("{")
+        e = out.rfind("}")
+        if s < 0 or e <= s:
+            raise ValueError("Extraction model did not return a JSON object.")
+        parsed = json.loads(out[s : e + 1])
+
+    return {
+        "result": parsed,
+        "raw_response": out,
+        "raw_ocr_text": raw_ocr,
+    }
+
+
 def _process_job(job_id: str, mode: str, base64_image: str, settings: Dict[str, Any]) -> None:
     try:
         store.update(job_id, status="processing", progress=10, stage="Preparing pipeline")
-        prompt = _extract_mode_prompt(mode, settings)
-        doc_text: Optional[str] = None
-        raw_ocr = ""
-
         ocr_provider = normalize_ocr_provider(settings)
         if ocr_provider == "google":
             store.update(job_id, progress=30, stage="Running Google OCR")
-            raw_ocr = _google_ocr(settings.get("googleVisionKey", ""), base64_image)
-            doc_text = raw_ocr
         elif ocr_provider in ("ollama", "lmstudio", "openai"):
             store.update(job_id, progress=30, stage=f"Running {ocr_provider} VLM OCR")
-            raw_ocr = _run_vlm_ocr(settings, base64_image)
-            doc_text = raw_ocr
+        else:
+            store.update(job_id, progress=30, stage="Skipping OCR")
 
-        store.update(job_id, progress=65, stage="Running extraction model", raw_ocr_text=raw_ocr)
-        out = _run_chat_provider(settings, prompt, None if doc_text else base64_image, doc_text)
-
-        parsed: Any = out
-        if mode in (XML_MODE, CUSTOMDB_MODE):
-            s = out.find("{")
-            e = out.rfind("}")
-            if s < 0 or e <= s:
-                store.update(job_id, raw_response=out)
-                raise ValueError("Extraction model did not return a JSON object. Raw response was saved on the job.")
-            parsed = json.loads(out[s : e + 1])
-
+        store.update(job_id, progress=65, stage="Running extraction model")
+        conversion = _run_conversion(mode, base64_image, settings)
         store.update(
             job_id,
             status="completed",
             progress=100,
             stage="Completed",
-            result=parsed,
-            raw_response=out,
+            result=conversion["result"],
+            raw_response=conversion["raw_response"],
+            raw_ocr_text=conversion["raw_ocr_text"],
             completed_at=utc_now(),
         )
     except Exception as exc:  # noqa: BLE001
@@ -531,6 +588,19 @@ def _process_job(job_id: str, mode: str, base64_image: str, settings: Dict[str, 
             error=str(exc),
             completed_at=utc_now(),
         )
+
+
+def _convert_batch_file(file_path: Path, mode: str) -> Dict[str, Any]:
+    raw_bytes = file_path.read_bytes()
+    settings = load_base_settings()
+    mode = normalize_mode(mode)
+    if mode not in VALID_MODES:
+        raise ValueError("mode must be one of: customdb, xml, dynamic")
+    base64_image = _bytes_to_base64_image(file_path.name, "", raw_bytes)
+    return _run_conversion(mode, base64_image, settings)
+
+
+batch_worker = BatchWorker(_convert_batch_file)
 
 
 @app.get("/api/health")
@@ -625,6 +695,71 @@ def get_job(job_id: str) -> Dict[str, Any]:
     if not job:
         raise HTTPException(404, "Job not found")
     return job
+
+
+@app.get("/api/batch/status")
+def batch_status() -> Dict[str, Any]:
+    return batch_worker.status()
+
+
+@app.post("/api/batch/config")
+def batch_config(payload: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        return batch_worker.configure(payload)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/api/batch/browse")
+def batch_browse(path: Optional[str] = None) -> Dict[str, Any]:
+    try:
+        roots: List[str] = []
+        for drive_ord in range(ord("A"), ord("Z") + 1):
+            drive = Path(f"{chr(drive_ord)}:/")
+            if drive.exists():
+                roots.append(str(drive))
+        if not roots:
+            roots.append(str(Path("/")))
+
+        current = Path(path).expanduser() if path else BASE_DIR
+        if not current.exists() or not current.is_dir():
+            current = BASE_DIR
+        directories = []
+        for child in sorted(current.iterdir(), key=lambda p: p.name.lower()):
+            try:
+                if child.is_dir():
+                    directories.append({"name": child.name, "path": str(child)})
+            except OSError:
+                continue
+        return {
+            "path": str(current),
+            "parent": str(current.parent) if current.parent != current else "",
+            "roots": roots,
+            "directories": directories,
+        }
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/batch/start")
+def batch_start(payload: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        return batch_worker.start(payload)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/batch/stop")
+def batch_stop() -> Dict[str, Any]:
+    return batch_worker.stop()
+
+
+@app.post("/api/batch/run-once")
+def batch_run_once(payload: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        return batch_worker.run_once(payload)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, str(exc)) from exc
 
 
 @app.post("/api/jobs")

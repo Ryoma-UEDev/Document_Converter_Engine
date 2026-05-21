@@ -64,7 +64,7 @@
             </div>
         </div>
 
-        <button @click="extractData" :disabled="isProcessing" class="mt-4 w-full py-3 text-white font-bold rounded shadow disabled:opacity-50 transition flex justify-center items-center gap-2" :class="extractBtnClass">
+        <button @click="extractData" :disabled="isProcessing || activeTab === 'batch'" class="mt-4 w-full py-3 text-white font-bold rounded shadow disabled:opacity-50 transition flex justify-center items-center gap-2" :class="extractBtnClass">
             <span v-if="isProcessing" class="loader !w-5 !h-5 !border-2"></span>
             {{ isProcessing ? (ocrStatus || t('processing')) : t('extractData') + ' (' + extractBtnLabel + ')' }}
         </button>
@@ -100,6 +100,7 @@
         <button @click="activeTab = 'xml'" :class="modeTabClass('xml')" class="py-2 px-4 font-bold text-sm rounded">{{ t('xmlMode') }}</button>
         <button @click="activeTab = 'customdb'" :class="modeTabClass('customdb')" class="py-2 px-4 font-bold text-sm rounded">{{ t('customDbMode') }}</button>
         <button @click="activeTab = 'dynamic'" :class="modeTabClass('dynamic')" class="py-2 px-4 font-bold text-sm rounded">{{ t('dynamicMode') }}</button>
+        <button @click="activeTab = 'batch'" :class="modeTabClass('batch')" class="py-2 px-4 font-bold text-sm rounded">{{ t('batchMode') }}</button>
     </div>
 
     <div v-if="activeTab === 'xml'">
@@ -162,6 +163,57 @@
       </div>
       <div class="bg-white border rounded shadow-sm p-4">
         <textarea v-model="dynamicVisibleText" class="w-full h-[520px] border rounded p-2 font-mono text-xs"></textarea>
+      </div>
+    </div>
+
+    <div v-if="activeTab === 'batch'">
+      <div class="flex justify-between items-center gap-3 mb-4 min-h-[44px]">
+        <div>
+          <h2 class="text-lg font-bold text-gray-800">{{ t('batchMode') }}</h2>
+          <p class="text-xs text-gray-500">{{ t('batchSubtitle') }}</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button @click="runBatchOnce" :disabled="isBatchBusy || batchStatus.running" class="px-3 py-2 border rounded bg-white text-gray-700 font-medium text-xs disabled:opacity-50">{{ t('runOnce') }}</button>
+          <button v-if="!batchStatus.running" @click="startBatchWorker" :disabled="isBatchBusy" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded shadow transition disabled:opacity-50">{{ t('startBatch') }}</button>
+          <button v-else @click="stopBatchWorker" :disabled="isBatchBusy" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded shadow transition disabled:opacity-50">{{ t('stopBatch') }}</button>
+        </div>
+      </div>
+      <div class="bg-white border rounded shadow-sm p-4 space-y-4">
+        <div v-if="batchError" class="border border-red-300 bg-red-50 text-red-800 p-3 rounded text-xs whitespace-pre-wrap">{{ batchError }}</div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-bold">{{ t('inputFolder') }}</label>
+            <div class="flex gap-2"><input v-model="batchConfig.inputDir" type="text" class="flex-1 border p-2 rounded font-mono text-xs"><button @click="openDirectoryBrowser('inputDir')" class="px-3 py-2 border rounded bg-white text-xs font-medium">{{ t('browse') }}</button></div>
+          </div>
+          <div>
+            <label class="text-xs font-bold">{{ t('outputFolder') }}</label>
+            <div class="flex gap-2"><input v-model="batchConfig.outputDir" type="text" class="flex-1 border p-2 rounded font-mono text-xs"><button @click="openDirectoryBrowser('outputDir')" class="px-3 py-2 border rounded bg-white text-xs font-medium">{{ t('browse') }}</button></div>
+          </div>
+          <label class="col-span-2 flex items-center gap-2 text-xs font-medium text-gray-700">
+            <input v-model="batchConfig.keepInputFiles" type="checkbox" class="w-4 h-4">
+            <span>{{ t('keepFilesInRoot') }}</span>
+          </label>
+          <div><label class="text-xs font-bold">{{ t('batchConversionMode') }}</label><select v-model="batchConfig.mode" class="w-full border p-2 rounded bg-white text-sm"><option value="customdb">{{ t('customDbMode') }}</option><option value="xml">{{ t('xmlMode') }}</option><option value="dynamic">{{ t('dynamicMode') }}</option></select></div>
+          <div><label class="text-xs font-bold">{{ t('pollSeconds') }}</label><input v-model.number="batchConfig.pollSeconds" type="number" min="2" class="w-full border p-2 rounded font-mono text-xs"></div>
+        </div>
+        <p class="text-xs text-gray-500">{{ t('batchFolderHelp') }}</p>
+        <div class="grid grid-cols-3 gap-3 text-xs">
+          <div class="border rounded p-3 bg-gray-50"><div class="font-bold text-gray-500">{{ t('status') }}</div><div>{{ batchStatus.running ? t('running') : t('stopped') }}</div></div>
+          <div class="border rounded p-3 bg-gray-50"><div class="font-bold text-gray-500">{{ t('processed') }}</div><div>{{ batchStatus.totals?.processed || 0 }}</div></div>
+          <div class="border rounded p-3 bg-gray-50"><div class="font-bold text-gray-500">{{ t('failed') }}</div><div>{{ batchStatus.totals?.failed || 0 }}</div></div>
+        </div>
+        <div class="text-xs text-gray-600"><span class="font-bold">{{ t('runFolder') }}:</span> {{ batchStatus.runDir || '-' }}</div>
+        <div class="text-xs text-gray-600"><span class="font-bold">{{ t('currentFile') }}:</span> {{ batchStatus.currentFile || '-' }}</div>
+        <div>
+          <div class="font-bold text-xs mb-2">{{ t('batchHistory') }}</div>
+          <div class="max-h-72 overflow-y-auto border rounded divide-y">
+            <div v-if="!batchStatus.items || !batchStatus.items.length" class="p-3 text-xs text-gray-500">{{ t('noBatchItems') }}</div>
+            <div v-for="item in batchStatus.items" :key="item.time + item.file + item.status" class="p-2 text-xs">
+              <div class="flex justify-between gap-3"><span class="font-semibold truncate">{{ item.file }}</span><span :class="item.status === 'completed' ? 'text-emerald-700' : 'text-red-700'">{{ item.status }}</span></div>
+              <div class="text-gray-500 truncate">{{ item.output || item.error || item.archive }}</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 </div>
@@ -301,6 +353,31 @@
     </div>
   </div>
 </div>
+<div v-if="showDirectoryBrowser" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+  <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+    <div class="p-5 border-b flex justify-between items-center">
+      <h3 class="font-bold text-lg">{{ t('selectFolder') }}</h3>
+      <button @click="showDirectoryBrowser = false" class="text-gray-400 hover:text-gray-700 font-bold">X</button>
+    </div>
+    <div class="p-4 border-b bg-gray-50 space-y-2">
+      <div class="text-xs font-bold text-gray-500">{{ t('currentFolder') }}</div>
+      <div class="font-mono text-xs break-all">{{ directoryBrowser.path || '-' }}</div>
+      <div v-if="directoryBrowser.error" class="border border-red-300 bg-red-50 text-red-800 p-2 rounded text-xs whitespace-pre-wrap">{{ directoryBrowser.error }}</div>
+      <div class="flex flex-wrap gap-2">
+        <button v-if="directoryBrowser.parent" @click="loadDirectory(directoryBrowser.parent)" class="px-3 py-1 border rounded bg-white text-xs">{{ t('parentFolder') }}</button>
+        <button v-for="root in directoryBrowser.roots" :key="root" @click="loadDirectory(root)" class="px-3 py-1 border rounded bg-white text-xs font-mono">{{ root }}</button>
+      </div>
+    </div>
+    <div class="p-4 overflow-y-auto flex-1">
+      <div v-if="!directoryBrowser.directories.length" class="text-xs text-gray-500">{{ t('noFolders') }}</div>
+      <button v-for="dir in directoryBrowser.directories" :key="dir.path" @click="loadDirectory(dir.path)" class="w-full text-left p-2 border-b hover:bg-gray-50 font-mono text-xs">{{ dir.name }}</button>
+    </div>
+    <div class="p-4 bg-gray-50 border-t flex justify-end gap-2">
+      <button @click="showDirectoryBrowser = false" class="px-4 py-2 border rounded bg-white">{{ t('cancel') }}</button>
+      <button @click="chooseDirectory" class="px-4 py-2 rounded bg-gray-800 text-white font-bold">{{ t('chooseFolder') }}</button>
+    </div>
+  </div>
+</div>
 </div>
 <script>
 const { createApp, markRaw } = Vue;
@@ -369,7 +446,7 @@ const app = createApp({
       zoomLevel:1,panX:0,panY:0,isDragging:false,startX:0,startY:0,
       activeTab:'customdb',availableOpenAiModels:[],availableOllamaModels:[],availableLMStudioModels:[],availableOcrOpenAiModels:[],availableOcrOllamaModels:[],availableOcrLMStudioModels:[],isProbingModels:false,
       modelPicker:{openAiModel:'',ollamaModel:'',lmStudioModel:'',ocrOpenAiModel:'',ocrOllamaModel:'',ocrLmStudioModel:''},
-      settings: { provider:'openai', openAiBaseUrl:'https://api.openai.com/v1', openAiKey:'', openAiModel:'gpt-4o-mini', ollamaUrl:'http://localhost:11434/v1', ollamaModel:'', lmStudioUrl:'http://localhost:1234', lmStudioModel:'', ocrProvider:'none', ocrMode:'none', googleVisionKey:'', ocrOpenAiBaseUrl:'https://api.openai.com/v1', ocrOpenAiKey:'', ocrOpenAiModel:'', ocrOllamaUrl:'http://localhost:11434/v1', ocrOllamaModel:'', ocrLmStudioUrl:'http://localhost:1234', ocrLmStudioModel:'', maxTokens:2048, ollamaMaxTokens:8192, ocrMaxTokens:4096, ocrOllamaMaxTokens:8192, xmlPrompt:'', customDbPrompt:'', dynamicPrompt:'', ocrPrompt:'', customDbSchema: JSON.parse(JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA)), customJsonMapping:{}, pipelineSettings:{mode:'customdb'} },
+      settings: { provider:'openai', openAiBaseUrl:'https://api.openai.com/v1', openAiKey:'', openAiModel:'gpt-4o-mini', ollamaUrl:'http://localhost:11434/v1', ollamaModel:'', lmStudioUrl:'http://localhost:1234', lmStudioModel:'', ocrProvider:'none', ocrMode:'none', googleVisionKey:'', ocrOpenAiBaseUrl:'https://api.openai.com/v1', ocrOpenAiKey:'', ocrOpenAiModel:'', ocrOllamaUrl:'http://localhost:11434/v1', ocrOllamaModel:'', ocrLmStudioUrl:'http://localhost:1234', ocrLmStudioModel:'', maxTokens:2048, ollamaMaxTokens:8192, ocrMaxTokens:4096, ocrOllamaMaxTokens:8192, xmlPrompt:'', customDbPrompt:'', dynamicPrompt:'', ocrPrompt:'', customDbSchema: JSON.parse(JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA)), customJsonMapping:{}, pipelineSettings:{mode:'customdb'}, batchSettings:{inputDir:'',outputDir:'',mode:'customdb',pollSeconds:10,keepInputFiles:false} },
       schemaDraft: JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA, null, 2),
       mappingDraft: '{}',
       mappingModel:{},
@@ -388,12 +465,19 @@ const app = createApp({
         items:[{ title:'', description:'', code:'', amount:1, unit:'', item_price:0, item_sum:0, vat_sum:0, total_sum:0 }]
       },
       dynamicText:'',
-      dynamicFilterDuplicates: localStorage.getItem('dynamic_filter_duplicates') === '1'
+      dynamicFilterDuplicates: localStorage.getItem('dynamic_filter_duplicates') === '1',
+      batchConfig:{inputDir:'',outputDir:'',mode:'customdb',pollSeconds:10,keepInputFiles:false},
+      batchStatus:{running:false,config:{},totals:{processed:0,failed:0},items:[],currentFile:'',lastError:''},
+      batchError:'',
+      isBatchBusy:false,
+      showDirectoryBrowser:false,
+      directoryBrowserTarget:'',
+      directoryBrowser:{path:'',parent:'',roots:[],directories:[],error:''}
     }
   },
   computed: {
-    extractBtnClass() { return this.activeTab === 'xml' ? 'bg-blue-600 hover:bg-blue-700' : (this.isCustomDbMode(this.activeTab) ? 'bg-rose-600 hover:bg-rose-700' : 'bg-purple-600 hover:bg-purple-700'); },
-    extractBtnLabel() { return this.activeTab === 'xml' ? this.t('extractXmlMode') : (this.isCustomDbMode(this.activeTab) ? this.t('extractCustomDbMode') : this.t('extractDynamicMode')); },
+    extractBtnClass() { return this.activeTab === 'batch' ? 'bg-gray-400' : (this.activeTab === 'xml' ? 'bg-blue-600 hover:bg-blue-700' : (this.isCustomDbMode(this.activeTab) ? 'bg-rose-600 hover:bg-rose-700' : 'bg-purple-600 hover:bg-purple-700')); },
+    extractBtnLabel() { return this.activeTab === 'batch' ? this.t('batchMode') : (this.activeTab === 'xml' ? this.t('extractXmlMode') : (this.isCustomDbMode(this.activeTab) ? this.t('extractCustomDbMode') : this.t('extractDynamicMode'))); },
     xmlText: { get() { return JSON.stringify(this.xmlForm, null, 2); }, set(v) { try { this.xmlForm = JSON.parse(v || '{}'); } catch(e){} } },
     customDbText: { get() { return JSON.stringify(this.customDbForm, null, 2); }, set(v) { try { this.customDbForm = JSON.parse(v || '{}'); } catch(e){} } },
     dynamicOutputText() { return this.dynamicFilterDuplicates ? this.filterDuplicateLines(this.dynamicText) : this.dynamicText; },
@@ -431,6 +515,7 @@ const app = createApp({
       this.updateDocumentTitle();
     },
     activeTab(v) {
+      if (v === 'batch') return;
       if (!this.isPlainObject(this.settings.pipelineSettings)) this.settings.pipelineSettings = {};
       this.settings.pipelineSettings.mode = this.normalizeMode(v);
     },
@@ -447,7 +532,9 @@ const app = createApp({
     this.syncSettingsDrafts();
     this.customDbForm = this.normalizeCustomDb({});
     await this.refreshJobs();
+    await this.refreshBatchStatus();
     setInterval(this.refreshJobs, 2000);
+    setInterval(this.refreshBatchStatus, 3000);
   },
   methods: {
     apiBase() {
@@ -500,6 +587,9 @@ const app = createApp({
     },
     normalizeMode(mode) {
       return mode || 'customdb';
+    },
+    activeConversionMode() {
+      return ['xml', 'customdb', 'dynamic'].includes(this.activeTab) ? this.activeTab : (this.settings.pipelineSettings?.mode || 'customdb');
     },
     normalizeProvider(provider) {
       if (provider === 'openai_compatible') return 'openai';
@@ -623,6 +713,8 @@ const app = createApp({
       if (!Number.isFinite(Number(this.settings.ocrOllamaMaxTokens)) || Number(this.settings.ocrOllamaMaxTokens) <= 0) this.settings.ocrOllamaMaxTokens = 8192;
       if (!this.isPlainObject(this.settings.customDbSchema)) this.settings.customDbSchema = this.clone(DEFAULT_CUSTOMDB_SCHEMA);
       if (!this.isPlainObject(this.settings.customJsonMapping)) this.settings.customJsonMapping = {};
+      if (!this.isPlainObject(this.settings.batchSettings)) this.settings.batchSettings = { inputDir:'', outputDir:'', mode:'customdb', pollSeconds:10, keepInputFiles:false };
+      this.batchConfig = { ...this.batchConfig, ...this.settings.batchSettings };
       if (!this.isPlainObject(this.settings.pipelineSettings)) this.settings.pipelineSettings = { mode: this.activeTab || 'customdb' };
       this.settings.pipelineSettings.mode = this.normalizeMode(this.settings.pipelineSettings.mode);
       if (!['customdb', 'xml', 'dynamic'].includes(this.settings.pipelineSettings.mode)) this.settings.pipelineSettings.mode = 'customdb';
@@ -681,7 +773,8 @@ const app = createApp({
       this.settings.provider = this.normalizeProvider(this.settings.provider);
       this.settings.ocrProvider = this.normalizeOcrProvider(this.settings);
       this.settings.ocrMode = this.settings.ocrProvider;
-      this.settings.pipelineSettings.mode = this.normalizeMode(this.activeTab);
+      this.settings.pipelineSettings.mode = this.normalizeMode(this.activeConversionMode());
+      this.settings.batchSettings = this.batchPayload();
       delete this.settings.filterDuplicates;
       return this.applySchemaDraft() && this.applyMappingDraft();
     },
@@ -846,12 +939,13 @@ const app = createApp({
     },
     async extractData() {
       if (!this.fileObj) return;
+      if (this.activeTab === 'batch') return;
       if (!this.applyDraftSettings()) return;
       this.isProcessing = true; this.ocrStatus = this.t('submittingJob'); this.errorMsg = '';
       try {
         const fd = new FormData();
         fd.append('file', this.fileObj);
-        fd.append('mode', this.activeTab);
+        fd.append('mode', this.activeConversionMode());
         fd.append('settings_json', JSON.stringify(this.settings));
         const r = await fetch(`${this.apiBase()}/api/jobs`, { method:'POST', body: fd });
         if (!r.ok) throw new Error(await r.text());
@@ -878,6 +972,72 @@ const app = createApp({
         const r = await fetch(`${this.apiBase()}/api/jobs`);
         if (r.ok) this.jobs = await r.json();
       } catch(e) {}
+    },
+    batchPayload() {
+      return {
+        inputDir: this.batchConfig.inputDir || '',
+        outputDir: this.batchConfig.outputDir || '',
+        mode: this.batchConfig.mode || 'customdb',
+        pollSeconds: Number(this.batchConfig.pollSeconds) || 10,
+        keepInputFiles: Boolean(this.batchConfig.keepInputFiles)
+      };
+    },
+    syncBatchStatus(data) {
+      if (!data || typeof data !== 'object') return;
+      this.batchStatus = data;
+      if (data.config && typeof data.config === 'object' && (data.config.inputDir || data.config.outputDir)) this.batchConfig = { ...this.batchConfig, ...data.config };
+      if (data.lastError) this.batchError = data.lastError;
+    },
+    async refreshBatchStatus() {
+      try {
+        const r = await fetch(`${this.apiBase()}/api/batch/status`);
+        if (r.ok) this.syncBatchStatus(await r.json());
+      } catch(e) {}
+    },
+    async openDirectoryBrowser(target) {
+      this.directoryBrowserTarget = target;
+      this.showDirectoryBrowser = true;
+      const current = this.batchConfig[target] || '';
+      await this.loadDirectory(current);
+    },
+    async loadDirectory(path) {
+      try {
+        const query = path ? `?path=${encodeURIComponent(path)}` : '';
+        const r = await fetch(`${this.apiBase()}/api/batch/browse${query}`);
+        if (!r.ok) throw new Error(await r.text());
+        const data = await r.json();
+        this.directoryBrowser = { path:data.path || '', parent:data.parent || '', roots:data.roots || [], directories:data.directories || [], error:'' };
+      } catch(e) {
+        this.directoryBrowser = { ...this.directoryBrowser, error:e.message };
+      }
+    },
+    chooseDirectory() {
+      if (this.directoryBrowserTarget && this.directoryBrowser.path) this.batchConfig[this.directoryBrowserTarget] = this.directoryBrowser.path;
+      this.showDirectoryBrowser = false;
+    },
+    async startBatchWorker() {
+      this.isBatchBusy = true; this.batchError = '';
+      try {
+        const r = await fetch(`${this.apiBase()}/api/batch/start`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(this.batchPayload()) });
+        if (!r.ok) throw new Error(await r.text());
+        this.syncBatchStatus(await r.json());
+      } catch(e) { this.batchError = e.message; } finally { this.isBatchBusy = false; }
+    },
+    async stopBatchWorker() {
+      this.isBatchBusy = true; this.batchError = '';
+      try {
+        const r = await fetch(`${this.apiBase()}/api/batch/stop`, { method:'POST' });
+        if (!r.ok) throw new Error(await r.text());
+        this.syncBatchStatus(await r.json());
+      } catch(e) { this.batchError = e.message; } finally { this.isBatchBusy = false; }
+    },
+    async runBatchOnce() {
+      this.isBatchBusy = true; this.batchError = '';
+      try {
+        const r = await fetch(`${this.apiBase()}/api/batch/run-once`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(this.batchPayload()) });
+        if (!r.ok) throw new Error(await r.text());
+        this.syncBatchStatus(await r.json());
+      } catch(e) { this.batchError = e.message; } finally { this.isBatchBusy = false; }
     },
     loadJobResult(job) {
       if (job.mode === 'customdb') {
