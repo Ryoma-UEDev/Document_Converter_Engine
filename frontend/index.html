@@ -18,6 +18,7 @@
         .invoice-input { background: transparent; border: none; border-bottom: 1px solid transparent; outline: none; transition: border-color 0.2s, background-color 0.2s; }
         .invoice-input:hover { border-bottom: 1px dashed #9ca3af; background-color: #fefce8; }
         .invoice-input:focus { border-bottom: 1px solid #3b82f6; background-color: #eff6ff; }
+        .secret-input { -webkit-text-security: disc; text-security: disc; }
     </style>
 </head>
 <body class="bg-gray-100 h-screen flex flex-col text-sm">
@@ -96,21 +97,26 @@
 
 <div class="w-1/2 p-6 overflow-y-auto bg-gray-200 flex flex-col">
     <div class="flex border-b border-gray-300 mb-6 bg-white shadow-sm p-2 rounded">
-        <button @click="activeTab = 'xml'" class="py-2 px-4 font-bold text-sm">{{ t('xmlMode') }}</button>
-        <button @click="activeTab = 'customdb'" class="py-2 px-4 font-bold text-sm">{{ t('customDbMode') }}</button>
-        <button @click="activeTab = 'dynamic'" class="py-2 px-4 font-bold text-sm">{{ t('dynamicMode') }}</button>
+        <button @click="activeTab = 'xml'" :class="modeTabClass('xml')" class="py-2 px-4 font-bold text-sm rounded">{{ t('xmlMode') }}</button>
+        <button @click="activeTab = 'customdb'" :class="modeTabClass('customdb')" class="py-2 px-4 font-bold text-sm rounded">{{ t('customDbMode') }}</button>
+        <button @click="activeTab = 'dynamic'" :class="modeTabClass('dynamic')" class="py-2 px-4 font-bold text-sm rounded">{{ t('dynamicMode') }}</button>
     </div>
 
-    <div v-if="activeTab === 'xml'" class="bg-white p-4 rounded shadow-sm">
-      <div class="flex justify-between items-center mb-2">
-        <h2 class="font-bold">{{ t('xmlJson') }}</h2>
-        <button @click="downloadJson(xmlForm, 'xml.json')" class="px-3 py-1 bg-green-600 text-white rounded">{{ t('exportJson') }}</button>
+    <div v-if="activeTab === 'xml'">
+      <div class="flex justify-between items-center gap-3 mb-4 min-h-[44px]">
+        <div>
+          <h2 class="text-lg font-bold text-gray-800">{{ t('xmlMode') }}</h2>
+          <p class="text-xs text-gray-500">{{ t('xmlJson') }}</p>
+        </div>
+        <button @click="downloadJson(xmlForm, 'xml.json')" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded shadow transition">{{ t('exportJson') }}</button>
       </div>
-      <textarea v-model="xmlText" class="w-full h-[520px] border rounded p-2 font-mono text-xs"></textarea>
+      <div class="bg-white border rounded shadow-sm p-4">
+        <textarea v-model="xmlText" class="w-full h-[520px] border rounded p-2 font-mono text-xs"></textarea>
+      </div>
     </div>
 
     <div v-if="activeTab === 'customdb'">
-      <div class="flex justify-between items-center gap-3 mb-4">
+      <div class="flex justify-between items-center gap-3 mb-4 min-h-[44px]">
         <div>
           <h2 class="text-lg font-bold text-gray-800">{{ t('visualPreview') }}</h2>
           <p class="text-xs text-gray-500">{{ customDbViewerTemplateName }}</p>
@@ -122,50 +128,57 @@
           <button @click="exportCustomDb" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded shadow transition">{{ t('exportJson') }}</button>
         </div>
       </div>
-      <div v-if="customDbViewerError" class="mb-3 border border-red-300 bg-red-50 text-red-800 p-3 rounded text-xs whitespace-pre-wrap">{{ customDbViewerError }}</div>
-      <component
-        :is="customDbViewerComponent"
-        :key="customDbViewerTemplateName"
-        :custom-db-form="customDbForm"
-        :additional-item-fields="additionalItemFields"
-        :additional-buyer-fields="additionalBuyerFields"
-        :additional-counterparty-fields="additionalCounterpartyFields"
-        :additional-root-fields="additionalRootFields"
-        :additional-object-groups="additionalObjectGroups"
-        :schema-has="schemaHas"
-        :translate="t"
-        :add-custom-db-item="addCustomDbItem"
-      ></component>
+      <div class="bg-white border rounded shadow-sm p-4">
+        <div v-if="customDbViewerError" class="mb-3 border border-red-300 bg-red-50 text-red-800 p-3 rounded text-xs whitespace-pre-wrap">{{ customDbViewerError }}</div>
+        <component
+          :is="customDbViewerComponent"
+          :key="customDbViewerTemplateName"
+          :custom-db-form="customDbForm"
+          :additional-item-fields="additionalItemFields"
+          :additional-buyer-fields="additionalBuyerFields"
+          :additional-counterparty-fields="additionalCounterpartyFields"
+          :additional-root-fields="additionalRootFields"
+          :additional-object-groups="additionalObjectGroups"
+          :schema-has="schemaHas"
+          :translate="t"
+          :add-custom-db-item="addCustomDbItem"
+        ></component>
+      </div>
     </div>
 
-    <div v-if="activeTab === 'dynamic'" class="bg-white p-4 rounded shadow-sm">
-      <div class="flex justify-between items-center mb-2">
-        <h2 class="font-bold">{{ t('dynamicLines') }}</h2>
+    <div v-if="activeTab === 'dynamic'">
+      <div class="flex justify-between items-center gap-3 mb-4 min-h-[44px]">
+        <div>
+          <h2 class="text-lg font-bold text-gray-800">{{ t('dynamicMode') }}</h2>
+          <p class="text-xs text-gray-500">{{ t('dynamicLines') }}</p>
+        </div>
         <div class="flex items-center gap-3">
           <label class="flex items-center gap-2 text-xs text-gray-600">
             <input v-model="dynamicFilterDuplicates" type="checkbox" class="h-4 w-4">
             {{ t('filterDuplicates') }}
           </label>
-          <button @click="downloadText(dynamicOutputText, 'dynamic.txt')" class="px-3 py-1 bg-purple-600 text-white rounded">{{ t('exportTxt') }}</button>
+          <button @click="downloadText(dynamicOutputText, 'dynamic.txt')" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded shadow transition">{{ t('exportTxt') }}</button>
         </div>
       </div>
-      <textarea v-model="dynamicVisibleText" class="w-full h-[520px] border rounded p-2 font-mono text-xs"></textarea>
+      <div class="bg-white border rounded shadow-sm p-4">
+        <textarea v-model="dynamicVisibleText" class="w-full h-[520px] border rounded p-2 font-mono text-xs"></textarea>
+      </div>
     </div>
 </div>
 </main>
 
 <div v-if="showSettings" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-<div class="bg-white w-full max-w-2xl rounded-lg shadow-xl flex flex-col max-h-[90vh]">
+<div class="bg-white w-full max-w-3xl rounded-lg shadow-xl flex flex-col h-[90vh]">
 <div class="p-6 border-b flex justify-between items-center">
     <h2 class="text-xl font-bold">{{ t('settingsTitle') }}</h2>
     <button @click="showSettings = false" class="text-gray-400 hover:text-gray-700 font-bold">X</button>
 </div>
 <div class="px-6 pt-4 border-b bg-gray-50">
     <div class="flex gap-2 text-sm font-bold">
-        <button @click="settingsTab = 'ai'" :class="settingsTabClass('ai')" class="px-3 py-2 rounded-t">{{ t('aiOcr') }}</button>
-        <button @click="settingsTab = 'prompts'" :class="settingsTabClass('prompts')" class="px-3 py-2 rounded-t">{{ t('prompts') }}</button>
-        <button @click="settingsTab = 'schema'" :class="settingsTabClass('schema')" class="px-3 py-2 rounded-t">{{ t('customDbSchema') }}</button>
-        <button @click="settingsTab = 'mapping'" :class="settingsTabClass('mapping')" class="px-3 py-2 rounded-t">{{ t('mapping') }}</button>
+        <button @click="settingsTab = 'ai'" :class="settingsTabClass('ai')" class="flex-1 h-10 px-3 rounded-t flex items-center justify-center text-center leading-tight">{{ t('aiOcr') }}</button>
+        <button @click="settingsTab = 'prompts'" :class="settingsTabClass('prompts')" class="flex-1 h-10 px-3 rounded-t flex items-center justify-center text-center leading-tight">{{ t('prompts') }}</button>
+        <button @click="settingsTab = 'schema'" :class="settingsTabClass('schema')" class="flex-1 h-10 px-3 rounded-t flex items-center justify-center text-center leading-tight">{{ t('customDbSetup') }}</button>
+        <button @click="settingsTab = 'mapping'" :class="settingsTabClass('mapping')" class="flex-1 h-10 px-3 rounded-t flex items-center justify-center text-center leading-tight">{{ t('mapping') }}</button>
     </div>
 </div>
 <div class="p-6 overflow-y-auto flex-1">
@@ -178,44 +191,52 @@
         </div>
         <div v-if="settings.provider === 'ollama'" class="mb-6 p-4 border rounded bg-emerald-50">
             <div class="mb-4"><label class="block text-sm font-bold mb-1">{{ t('ollamaBaseUrl') }}</label><input type="text" v-model="settings.ollamaUrl" class="w-full border p-2 rounded font-mono"></div>
-            <div><label class="block text-sm font-bold mb-1">{{ t('ollamaModel') }}</label><div class="flex gap-2"><input v-if="!availableOllamaModels.length" type="text" v-model="settings.ollamaModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-else v-model="settings.ollamaModel" class="flex-1 border p-2 rounded bg-white font-mono text-sm"><option v-if="settings.ollamaModel && !modelListHas(availableOllamaModels, settings.ollamaModel)" :value="settings.ollamaModel">{{ settings.ollamaModel }}</option><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableOllamaModels" :key="m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeOllamaModels" :disabled="isProbingModels" class="px-4 py-2 bg-emerald-600 text-white rounded">{{ t('probe') }}</button></div></div>
+            <div><label class="block text-sm font-bold mb-1">{{ t('ollamaModel') }}</label><div class="flex gap-2"><input type="text" v-model="settings.ollamaModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-model="modelPicker.ollamaModel" @change="applyPickedModel('ollamaModel')" class="w-56 border p-2 rounded bg-white font-mono text-sm"><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableOllamaModels" :key="m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeOllamaModels" :disabled="isProbingModels" class="px-4 py-2 bg-emerald-600 text-white rounded">{{ t('probe') }}</button></div></div>
         </div>
         <div v-if="settings.provider === 'openai'" class="mb-6 p-4 border rounded bg-indigo-50">
             <div class="mb-4"><label class="block text-sm font-bold mb-1">{{ t('openAiBaseUrl') }}</label><input type="text" v-model="settings.openAiBaseUrl" class="w-full border p-2 rounded font-mono"></div>
-            <div class="mb-4"><label class="block text-sm font-bold mb-1">{{ t('openAiApiKey') }}</label><input type="password" v-model="settings.openAiKey" class="w-full border p-2 rounded font-mono"></div>
-            <div><label class="block text-sm font-bold mb-1">{{ t('selectModel') }}</label><div class="flex gap-2"><input v-if="!availableOpenAiModels.length" type="text" v-model="settings.openAiModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-else v-model="settings.openAiModel" class="flex-1 border p-2 rounded bg-white font-mono text-sm"><option v-if="settings.openAiModel && !modelListHas(availableOpenAiModels, settings.openAiModel)" :value="settings.openAiModel">{{ settings.openAiModel }}</option><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableOpenAiModels" :key="m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeOpenAiModels" :disabled="isProbingModels" class="px-4 py-2 bg-indigo-600 text-white rounded">{{ t('probe') }}</button></div></div>
+            <div class="mb-4"><label class="block text-sm font-bold mb-1">{{ t('openAiApiKey') }}</label><input type="text" v-model="settings.openAiKey" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other" class="w-full border p-2 rounded font-mono secret-input"></div>
+            <div><label class="block text-sm font-bold mb-1">{{ t('selectModel') }}</label><div class="flex gap-2"><input type="text" v-model="settings.openAiModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-model="modelPicker.openAiModel" @change="applyPickedModel('openAiModel')" class="w-56 border p-2 rounded bg-white font-mono text-sm"><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableOpenAiModels" :key="m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeOpenAiModels" :disabled="isProbingModels" class="px-4 py-2 bg-indigo-600 text-white rounded">{{ t('probe') }}</button></div></div>
         </div>
         <div v-if="settings.provider === 'lmstudio'" class="mb-6 p-4 border rounded bg-purple-50">
             <div class="mb-4"><label class="block text-sm font-bold mb-1">{{ t('localServerUrl') }}</label><input type="text" v-model="settings.lmStudioUrl" class="w-full border p-2 rounded font-mono"></div>
-            <div><label class="block text-sm font-bold mb-1">{{ t('selectLlmModel') }}</label><div class="flex gap-2"><input v-if="!availableLMStudioModels.length" type="text" v-model="settings.lmStudioModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-else v-model="settings.lmStudioModel" class="flex-1 border p-2 rounded bg-white font-mono text-sm"><option v-if="settings.lmStudioModel && !modelListHas(availableLMStudioModels, settings.lmStudioModel)" :value="settings.lmStudioModel">{{ settings.lmStudioModel }}</option><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableLMStudioModels" :key="m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeLMStudioModels" :disabled="isProbingModels" class="px-4 py-2 bg-purple-600 text-white rounded">{{ t('probe') }}</button></div></div>
+            <div><label class="block text-sm font-bold mb-1">{{ t('selectLlmModel') }}</label><div class="flex gap-2"><input type="text" v-model="settings.lmStudioModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-model="modelPicker.lmStudioModel" @change="applyPickedModel('lmStudioModel')" class="w-56 border p-2 rounded bg-white font-mono text-sm"><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableLMStudioModels" :key="m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeLMStudioModels" :disabled="isProbingModels" class="px-4 py-2 bg-purple-600 text-white rounded">{{ t('probe') }}</button></div></div>
         </div>
         <div class="mb-6 p-4 border rounded bg-gray-100">
           <h3 class="font-bold text-gray-800 mb-2">{{ t('ocrPreProcessing') }}</h3>
           <label class="block text-xs font-bold mb-1">{{ t('ocrProvider') }}</label>
           <select v-model="settings.ocrProvider" class="w-full border p-2 rounded bg-white text-sm mb-3"><option value="none">{{ t('ocrProviderNone') }}</option><option value="google">{{ t('ocrProviderGoogle') }}</option><option value="ollama">{{ t('ocrProviderOllama') }}</option><option value="lmstudio">{{ t('ocrProviderLmStudio') }}</option><option value="openai">{{ t('ocrProviderOpenAi') }}</option></select>
-          <div v-if="settings.ocrProvider === 'google'" class="ml-2 pl-4 border-l-2 border-blue-400"><label class="block text-xs font-bold mb-1">{{ t('googleCloudApiKey') }}</label><input type="password" v-model="settings.googleVisionKey" class="w-full border p-2 rounded font-mono text-sm"></div>
+          <div v-if="settings.ocrProvider === 'google'" class="ml-2 pl-4 border-l-2 border-blue-400"><label class="block text-xs font-bold mb-1">{{ t('googleCloudApiKey') }}</label><input type="text" v-model="settings.googleVisionKey" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other" class="w-full border p-2 rounded font-mono text-sm secret-input"></div>
           <div v-if="settings.ocrProvider === 'ollama'" class="ml-2 pl-4 border-l-2 border-emerald-400 space-y-3">
             <div><label class="block text-xs font-bold mb-1">{{ t('ocrOllamaBaseUrl') }}</label><input type="text" v-model="settings.ocrOllamaUrl" class="w-full border p-2 rounded font-mono text-sm"></div>
-            <div><label class="block text-xs font-bold mb-1">{{ t('ocrOllamaModel') }}</label><div class="flex gap-2"><input v-if="!availableOcrOllamaModels.length" type="text" v-model="settings.ocrOllamaModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-else v-model="settings.ocrOllamaModel" class="flex-1 border p-2 rounded bg-white font-mono text-sm"><option v-if="settings.ocrOllamaModel && !modelListHas(availableOcrOllamaModels, settings.ocrOllamaModel)" :value="settings.ocrOllamaModel">{{ settings.ocrOllamaModel }}</option><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableOcrOllamaModels" :key="'ocr-ollama-' + m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeOcrOllamaModels" :disabled="isProbingModels" class="px-4 py-2 bg-emerald-600 text-white rounded">{{ t('probe') }}</button></div></div>
+            <div><label class="block text-xs font-bold mb-1">{{ t('ocrOllamaModel') }}</label><div class="flex gap-2"><input type="text" v-model="settings.ocrOllamaModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-model="modelPicker.ocrOllamaModel" @change="applyPickedModel('ocrOllamaModel')" class="w-56 border p-2 rounded bg-white font-mono text-sm"><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableOcrOllamaModels" :key="'ocr-ollama-' + m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeOcrOllamaModels" :disabled="isProbingModels" class="px-4 py-2 bg-emerald-600 text-white rounded">{{ t('probe') }}</button></div></div>
           </div>
           <div v-if="settings.ocrProvider === 'lmstudio'" class="ml-2 pl-4 border-l-2 border-purple-400 space-y-3">
             <div><label class="block text-xs font-bold mb-1">{{ t('ocrLmStudioBaseUrl') }}</label><input type="text" v-model="settings.ocrLmStudioUrl" class="w-full border p-2 rounded font-mono text-sm"></div>
-            <div><label class="block text-xs font-bold mb-1">{{ t('ocrLmStudioModel') }}</label><div class="flex gap-2"><input v-if="!availableOcrLMStudioModels.length" type="text" v-model="settings.ocrLmStudioModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-else v-model="settings.ocrLmStudioModel" class="flex-1 border p-2 rounded bg-white font-mono text-sm"><option v-if="settings.ocrLmStudioModel && !modelListHas(availableOcrLMStudioModels, settings.ocrLmStudioModel)" :value="settings.ocrLmStudioModel">{{ settings.ocrLmStudioModel }}</option><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableOcrLMStudioModels" :key="'ocr-lms-' + m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeOcrLMStudioModels" :disabled="isProbingModels" class="px-4 py-2 bg-purple-600 text-white rounded">{{ t('probe') }}</button></div></div>
+            <div><label class="block text-xs font-bold mb-1">{{ t('ocrLmStudioModel') }}</label><div class="flex gap-2"><input type="text" v-model="settings.ocrLmStudioModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-model="modelPicker.ocrLmStudioModel" @change="applyPickedModel('ocrLmStudioModel')" class="w-56 border p-2 rounded bg-white font-mono text-sm"><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableOcrLMStudioModels" :key="'ocr-lms-' + m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeOcrLMStudioModels" :disabled="isProbingModels" class="px-4 py-2 bg-purple-600 text-white rounded">{{ t('probe') }}</button></div></div>
           </div>
           <div v-if="settings.ocrProvider === 'openai'" class="ml-2 pl-4 border-l-2 border-indigo-400 space-y-3">
             <div><label class="block text-xs font-bold mb-1">{{ t('ocrOpenAiBaseUrl') }}</label><input type="text" v-model="settings.ocrOpenAiBaseUrl" class="w-full border p-2 rounded font-mono text-sm"></div>
-            <div><label class="block text-xs font-bold mb-1">{{ t('ocrOpenAiApiKey') }}</label><input type="password" v-model="settings.ocrOpenAiKey" class="w-full border p-2 rounded font-mono text-sm"></div>
-            <div><label class="block text-xs font-bold mb-1">{{ t('ocrOpenAiModel') }}</label><div class="flex gap-2"><input v-if="!availableOcrOpenAiModels.length" type="text" v-model="settings.ocrOpenAiModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-else v-model="settings.ocrOpenAiModel" class="flex-1 border p-2 rounded bg-white font-mono text-sm"><option v-if="settings.ocrOpenAiModel && !modelListHas(availableOcrOpenAiModels, settings.ocrOpenAiModel)" :value="settings.ocrOpenAiModel">{{ settings.ocrOpenAiModel }}</option><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableOcrOpenAiModels" :key="'ocr-openai-' + m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeOcrOpenAiModels" :disabled="isProbingModels" class="px-4 py-2 bg-indigo-600 text-white rounded">{{ t('probe') }}</button></div></div>
+            <div><label class="block text-xs font-bold mb-1">{{ t('ocrOpenAiApiKey') }}</label><input type="text" v-model="settings.ocrOpenAiKey" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other" class="w-full border p-2 rounded font-mono text-sm secret-input"></div>
+            <div><label class="block text-xs font-bold mb-1">{{ t('ocrOpenAiModel') }}</label><div class="flex gap-2"><input type="text" v-model="settings.ocrOpenAiModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-model="modelPicker.ocrOpenAiModel" @change="applyPickedModel('ocrOpenAiModel')" class="w-56 border p-2 rounded bg-white font-mono text-sm"><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableOcrOpenAiModels" :key="'ocr-openai-' + m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeOcrOpenAiModels" :disabled="isProbingModels" class="px-4 py-2 bg-indigo-600 text-white rounded">{{ t('probe') }}</button></div></div>
           </div>
         </div>
     </div>
-    <div v-if="settingsTab === 'prompts'" class="space-y-3">
-      <div><label class="text-xs font-bold">{{ t('xmlPrompt') }}</label><textarea v-model="settings.xmlPrompt" rows="3" class="w-full border p-2 rounded font-mono text-xs"></textarea></div>
+    <div v-if="settingsTab === 'prompts'" class="space-y-4">
+      <div><label class="text-xs font-bold">{{ t('xmlPrompt') }}</label><textarea v-model="settings.xmlPrompt" rows="7" class="w-full border p-2 rounded font-mono text-xs"></textarea></div>
+      <div><label class="text-xs font-bold">{{ t('dynamicPrompt') }}</label><textarea v-model="settings.dynamicPrompt" rows="7" class="w-full border p-2 rounded font-mono text-xs"></textarea></div>
+      <div><label class="text-xs font-bold">{{ t('ocrPrompt') }}</label><textarea v-model="settings.ocrPrompt" rows="7" class="w-full border p-2 rounded font-mono text-xs"></textarea></div>
+    </div>
+    <div v-if="settingsTab === 'schema'" class="space-y-4">
       <div>
-        <div class="flex justify-between items-center mb-1">
-          <label class="text-xs font-bold" :title="t('promptMarkerTooltip')">{{ t('customDbBasePrompt') }}</label>
-          <button @click="previewInjectedPrompt" class="px-3 py-1 bg-rose-600 text-white rounded text-xs font-bold">{{ t('inject') }}</button>
+        <div class="flex justify-between items-center mb-2">
+          <label class="text-sm font-bold">{{ t('centralSchema') }}</label>
+          <button @click="applySchemaSetup" class="px-3 py-1 bg-gray-800 text-white rounded text-xs font-bold">{{ t('applySchema') }}</button>
         </div>
+        <textarea v-model="schemaDraft" rows="18" class="w-full border p-2 rounded font-mono text-xs"></textarea>
+      </div>
+      <div>
+        <label class="text-xs font-bold" :title="t('promptMarkerTooltip')">{{ t('customDbBasePrompt') }}</label>
         <textarea v-model="settings.customDbPrompt" rows="6" class="w-full border p-2 rounded font-mono text-xs"></textarea>
         <p v-if="!customDbPromptHasMarker" class="mt-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2" :title="t('promptMarkerTooltip')">{{ t('promptMarkerNote') }}</p>
       </div>
@@ -223,15 +244,6 @@
         <label class="text-xs font-bold">{{ t('injectedPreview') }}</label>
         <textarea v-model="injectedPromptPreview" rows="8" readonly class="w-full border p-2 rounded font-mono text-xs bg-gray-50"></textarea>
       </div>
-      <div><label class="text-xs font-bold">{{ t('dynamicPrompt') }}</label><textarea v-model="settings.dynamicPrompt" rows="3" class="w-full border p-2 rounded font-mono text-xs"></textarea></div>
-      <div><label class="text-xs font-bold">{{ t('ocrPrompt') }}</label><textarea v-model="settings.ocrPrompt" rows="3" class="w-full border p-2 rounded font-mono text-xs"></textarea></div>
-    </div>
-    <div v-if="settingsTab === 'schema'">
-      <div class="flex justify-between items-center mb-2">
-        <label class="text-sm font-bold">{{ t('centralSchema') }}</label>
-        <button @click="applySchemaDraft" class="px-3 py-1 bg-gray-800 text-white rounded text-xs font-bold">{{ t('applySchema') }}</button>
-      </div>
-      <textarea v-model="schemaDraft" rows="22" class="w-full border p-2 rounded font-mono text-xs"></textarea>
     </div>
     <div v-if="settingsTab === 'mapping'">
       <div class="flex justify-between items-center mb-3">
@@ -275,6 +287,17 @@
     <div class="p-4 bg-gray-50 border-t flex justify-end gap-2">
       <button @click="showOverrideConfirm = false" class="px-4 py-2 border rounded bg-white">{{ t('cancel') }}</button>
       <button @click="confirmBackendSettingsSave" class="px-4 py-2 rounded bg-red-600 text-white font-bold">{{ t('override') }}</button>
+    </div>
+  </div>
+</div>
+<div v-if="showSchemaAppliedConfirm" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+  <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
+    <div class="p-5 border-b">
+      <h3 class="font-bold text-lg">{{ t('applySchema') }}</h3>
+    </div>
+    <div class="p-5 text-sm text-gray-600">{{ t('schemaAppliedInjected') }}</div>
+    <div class="p-4 bg-gray-50 border-t flex justify-end">
+      <button @click="showSchemaAppliedConfirm = false" class="px-4 py-2 rounded bg-gray-800 text-white font-bold">{{ t('ok') }}</button>
     </div>
   </div>
 </div>
@@ -341,10 +364,11 @@ const app = createApp({
     return {
       backendBase: localStorage.getItem('split_backend_base') || window.location.origin,
       uiLang: initialLang,
-      showSettings:false,showOverrideConfirm:false,settingsTab:'ai',settingsError:'',isProcessing:false,ocrStatus:'',errorMsg:'',
+      showSettings:false,showOverrideConfirm:false,showSchemaAppliedConfirm:false,settingsTab:'ai',settingsError:'',isProcessing:false,ocrStatus:'',errorMsg:'',
       filePreview:null,fileName:'',fileObj:null,currentJob:null,
       zoomLevel:1,panX:0,panY:0,isDragging:false,startX:0,startY:0,
       activeTab:'customdb',availableOpenAiModels:[],availableOllamaModels:[],availableLMStudioModels:[],availableOcrOpenAiModels:[],availableOcrOllamaModels:[],availableOcrLMStudioModels:[],isProbingModels:false,
+      modelPicker:{openAiModel:'',ollamaModel:'',lmStudioModel:'',ocrOpenAiModel:'',ocrOllamaModel:'',ocrLmStudioModel:''},
       settings: { provider:'openai', openAiBaseUrl:'https://api.openai.com/v1', openAiKey:'', openAiModel:'gpt-4o-mini', ollamaUrl:'http://localhost:11434/v1', ollamaModel:'', lmStudioUrl:'http://localhost:1234', lmStudioModel:'', ocrProvider:'none', ocrMode:'none', googleVisionKey:'', ocrOpenAiBaseUrl:'https://api.openai.com/v1', ocrOpenAiKey:'', ocrOpenAiModel:'', ocrOllamaUrl:'http://localhost:11434/v1', ocrOllamaModel:'', ocrLmStudioUrl:'http://localhost:1234', ocrLmStudioModel:'', maxTokens:2048, ollamaMaxTokens:8192, ocrMaxTokens:4096, ocrOllamaMaxTokens:8192, xmlPrompt:'', customDbPrompt:'', dynamicPrompt:'', ocrPrompt:'', customDbSchema: JSON.parse(JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA)), customJsonMapping:{}, pipelineSettings:{mode:'customdb'} },
       schemaDraft: JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA, null, 2),
       mappingDraft: '{}',
@@ -469,6 +493,11 @@ const app = createApp({
     modelListHas(models, id) {
       return Array.isArray(models) && models.some(m => m && m.id === id);
     },
+    applyPickedModel(settingsKey) {
+      const picked = this.modelPicker && this.modelPicker[settingsKey];
+      if (picked) this.settings[settingsKey] = picked;
+      this.modelPicker[settingsKey] = '';
+    },
     normalizeMode(mode) {
       return mode || 'customdb';
     },
@@ -493,6 +522,9 @@ const app = createApp({
     },
     settingsTabClass(tab) {
       return this.settingsTab === tab ? 'bg-white text-gray-900 border border-b-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-100 border border-transparent';
+    },
+    modeTabClass(tab) {
+      return this.normalizeMode(this.activeTab) === tab ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100';
     },
     isPlainObject(v) {
       return !!v && typeof v === 'object' && !Array.isArray(v);
@@ -621,6 +653,11 @@ const app = createApp({
         this.settingsTab = 'schema';
         return false;
       }
+    },
+    applySchemaSetup() {
+      if (!this.applySchemaDraft()) return;
+      this.injectedPromptPreview = this.renderInjectedPrompt();
+      this.showSchemaAppliedConfirm = true;
     },
     applyMappingDraft() {
       try {
