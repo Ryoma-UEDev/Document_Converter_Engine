@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableExtensions
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 set "OLLAMA_ROOT=%CD%\.standalone\ollama"
 set "OLLAMA_BIN=%OLLAMA_ROOT%\bin"

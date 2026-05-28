@@ -23,13 +23,13 @@ class BatchWorker:
         self._last_error = ""
         self._run_dir = ""
         self._seen_inputs = set()
+        self._planned_count = 0
 
     def _default_config(self) -> Dict[str, Any]:
         return {
             "inputDir": "",
             "outputDir": "",
             "mode": "customdb",
-            "pollSeconds": 10,
             "keepInputFiles": False,
         }
 
@@ -42,6 +42,7 @@ class BatchWorker:
                 "currentFile": self._current_file,
                 "lastError": self._last_error,
                 "totals": dict(self._totals),
+                "plannedCount": self._planned_count,
                 "items": list(self._items[-100:]),
             }
 
@@ -49,20 +50,6 @@ class BatchWorker:
         clean = self._clean_config(config)
         with self._lock:
             self._config.update(clean)
-        return self.status()
-
-    def start(self, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        if config:
-            self.configure(config)
-        self._validate_config()
-        with self._lock:
-            if self._thread is not None and self._thread.is_alive():
-                return self.status()
-            self._stop_event.clear()
-        self._prepare_run_folder()
-        with self._lock:
-            self._thread = threading.Thread(target=self._loop, name="batch-worker", daemon=True)
-            self._thread.start()
         return self.status()
 
     def stop(self) -> Dict[str, Any]:
@@ -76,8 +63,14 @@ class BatchWorker:
         if config:
             self.configure(config)
         self._validate_config()
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                return self.status()
+            self._stop_event.clear()
         self._prepare_run_folder()
-        self._scan_once()
+        with self._lock:
+            self._thread = threading.Thread(target=self._run_once_loop, name="batch-run-once", daemon=True)
+            self._thread.start()
         return self.status()
 
     def _clean_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -86,11 +79,6 @@ class BatchWorker:
             value = config.get(key)
             if value is not None:
                 clean[key] = str(value).strip()
-        if "pollSeconds" in config:
-            try:
-                clean["pollSeconds"] = max(2, int(config.get("pollSeconds")))
-            except (TypeError, ValueError):
-                clean["pollSeconds"] = self._config.get("pollSeconds", 10)
         if "keepInputFiles" in config:
             value = config.get("keepInputFiles")
             if isinstance(value, str):
@@ -140,17 +128,20 @@ class BatchWorker:
         with self._lock:
             self._run_dir = str(run_path)
             self._seen_inputs = set()
-
-    def _loop(self) -> None:
-        while not self._stop_event.is_set():
-            try:
-                self._scan_once()
-            except Exception as exc:  # noqa: BLE001
-                self._set_last_error(str(exc))
-            config = self._resolved_config()
-            self._stop_event.wait(max(2, int(config.get("pollSeconds", 10))))
-        with self._lock:
+            self._planned_count = 0
+            self._totals = {"processed": 0, "failed": 0}
+            self._items = []
             self._current_file = ""
+            self._last_error = ""
+
+    def _run_once_loop(self) -> None:
+        try:
+            self._scan_once()
+        except Exception as exc:  # noqa: BLE001
+            self._set_last_error(str(exc))
+        finally:
+            with self._lock:
+                self._current_file = ""
 
     def _scan_once(self) -> None:
         config = self._resolved_config()
@@ -166,6 +157,7 @@ class BatchWorker:
                 and not self._already_processed_in_run(p, config)
             )
         )
+        self._set_planned_count(len(files))
         for file_path in files:
             if self._stop_event.is_set():
                 break
@@ -284,3 +276,8 @@ class BatchWorker:
     def _set_last_error(self, error: str) -> None:
         with self._lock:
             self._last_error = error
+
+    def _set_planned_count(self, discovered_count: int) -> None:
+        with self._lock:
+            done_count = self._totals.get("processed", 0) + self._totals.get("failed", 0)
+            self._planned_count = max(self._planned_count, done_count + discovered_count)

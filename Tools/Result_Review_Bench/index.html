@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Pair Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+    <style>
+        [v-cloak] { display: none; }
+        .viewer-container { cursor: grab; user-select: none; background-color: #f3f4f6; }
+        .viewer-container:active { cursor: grabbing; }
+        .viewer-container img, .viewer-container canvas { pointer-events: none; -webkit-user-drag: none; }
+        .invoice-input { background: transparent; border: none; border-bottom: 1px solid transparent; outline: none; transition: all 0.15s; }
+        .invoice-input:hover { border-bottom: 1px dashed #cbd5e1; background-color: #fefce8; }
+        .invoice-input:focus { border-bottom: 1px solid #3b82f6; background-color: #eff6ff; }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col text-sm overflow-hidden font-sans">
+<div id="app" v-cloak class="flex flex-col h-full">
+
+    <!-- Header Section -->
+    <header class="bg-white border-b px-4 py-3 flex flex-wrap gap-4 items-center justify-between shadow-sm z-10">
+        <div class="flex items-center gap-4">
+            <h1 class="text-base font-bold text-gray-800 tracking-tight">Document Pair Editor</h1>
+            <div class="flex items-center gap-2">
+                <button @click="triggerManualOpen" class="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded text-xs font-semibold flex items-center gap-1">
+                    📁 Open Local File...
+                </button>
+                <input ref="manualFileInput" type="file" class="hidden" accept=".json,.pdf,.png,.jpg,.jpeg,.webp" @change="handleManualFile">
+            </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2 text-xs flex-1 max-w-4xl justify-end">
+            <div class="flex items-center gap-1 border rounded bg-gray-50 px-2 py-1">
+                <span class="text-gray-500 font-bold uppercase text-[9px]">Input:</span>
+                <input v-model="inputDir" type="text" class="bg-transparent border-0 font-mono w-48 outline-none text-xs" placeholder="/path/to/inputs">
+                <button @click="openDirBrowser('input')" class="text-blue-600 hover:underline font-semibold">Browse</button>
+            </div>
+            <div class="flex items-center gap-1 border rounded bg-gray-50 px-2 py-1">
+                <span class="text-gray-500 font-bold uppercase text-[9px]">Output:</span>
+                <input v-model="outputDir" type="text" class="bg-transparent border-0 font-mono w-48 outline-none text-xs" placeholder="/path/to/outputs">
+                <button @click="openDirBrowser('output')" class="text-blue-600 hover:underline font-semibold">Browse</button>
+            </div>
+            <button @click="scanDirectories" class="px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white rounded font-bold transition-all">
+                Scan Folders
+            </button>
+        </div>
+    </header>
+
+    <div class="flex-1 flex overflow-hidden relative">
+
+        <!-- Sidebar List: Collapsible -->
+        <aside :class="sidebarOpen ? 'w-80 border-r bg-white' : 'w-0'" class="transition-all duration-300 flex flex-col overflow-hidden relative h-full">
+            <div class="p-3 border-b bg-gray-50 flex items-center justify-between" v-if="sidebarOpen">
+                <span class="font-bold text-gray-700">Document Pairs ({{ pairs.length }})</span>
+                <button @click="sidebarOpen = false" class="text-gray-400 hover:text-gray-600 font-bold">◀ Hide</button>
+            </div>
+            <div class="flex-1 overflow-y-auto divide-y" v-if="sidebarOpen">
+                <div v-if="!pairs.length" class="p-4 text-center text-gray-400 text-xs">No pairs loaded. Specify folders above and click "Scan Folders".</div>
+                <div v-for="pair in pairs" 
+                     :key="pair.name" 
+                     @click="selectPair(pair)"
+                     @dblclick="loadPairDetails(pair)"
+                     :class="['p-3 cursor-pointer transition-all border-l-4 text-xs', 
+                              selectedPair === pair ? 'bg-blue-50/50 border-blue-500' : 'border-transparent hover:bg-gray-50',
+                              activePair === pair ? 'bg-blue-50 border-blue-600 font-semibold' : '']">
+                    <div class="font-bold truncate text-gray-800">{{ pair.name }}</div>
+                    <div class="text-[10px] text-gray-500 truncate mt-0.5">📄 {{ getFileName(pair.input_path) }}</div>
+                    <div class="text-[10px] text-gray-500 truncate">⚙ {{ getFileName(pair.output_path) }}</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Sidebar toggle drawer when closed -->
+        <div v-if="!sidebarOpen" class="absolute left-0 top-0 bottom-0 w-8 bg-gray-800 flex items-center justify-center cursor-pointer z-20 hover:bg-gray-700 transition-colors" @click="sidebarOpen = true">
+            <span class="text-white font-bold text-xs transform -rotate-90 whitespace-nowrap tracking-widest uppercase">Show Pairs</span>
+        </div>
+
+        <!-- Main Workspace -->
+        <main class="flex-1 flex overflow-hidden pl-8 md:pl-0">
+
+            <!-- Workspace: Left half (Document Viewer) -->
+            <section class="w-1/2 flex flex-col border-r bg-gray-50 h-full">
+                <div class="p-2 border-b bg-white flex items-center justify-between text-xs">
+                    <span class="font-bold text-gray-700 truncate">Preview: {{ activeDocName || 'No document loaded' }}</span>
+                    <div class="flex items-center gap-1" v-if="docSrc">
+                        <button @click="zoomOut" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 border rounded font-bold">-</button>
+                        <button @click="resetZoom" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 border rounded text-[10px]">{{ Math.round(zoomLevel * 100) }}%</button>
+                        <button @click="zoomIn" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 border rounded font-bold">+</button>
+                    </div>
+                </div>
+                
+                <div class="flex-1 relative overflow-hidden viewer-container border-b flex items-center justify-center" 
+                     @wheel.prevent="handleWheel" 
+                     @mousedown.prevent="startDrag" 
+                     @mousemove.prevent="onDrag" 
+                     @mouseup="endDrag" 
+                     @mouseleave="endDrag">
+                    
+                    <div v-if="loadingDocument" class="absolute inset-0 bg-white/75 flex items-center justify-center z-10">
+                        <span class="text-xs text-gray-500 animate-pulse font-semibold">Loading Page View...</span>
+                    </div>
+
+                    <div v-if="!docSrc" class="text-center p-8 text-gray-400">
+                        <div class="text-4xl mb-2">📄</div>
+                        <p class="text-xs">No preview file active.</p>
+                        <p class="text-[10px] text-gray-500 mt-1">Double click a scanned pair or open a local document.</p>
+                    </div>
+
+                    <div v-show="docSrc" :style="{ transform: `translate(${panX}px, ${panY}px) scale(${zoomLevel})`, transition: isDragging ? 'none' : 'transform 0.1s' }">
+                        <canvas ref="pdfCanvas" v-show="isPdf" class="shadow-lg max-w-full max-h-full"></canvas>
+                        <img :src="docSrc" v-show="!isPdf" @load="resetZoom" class="shadow-lg max-w-full max-h-full object-contain" />
+                    </div>
+                </div>
+            </section>
+
+            <!-- Workspace: Right half (JSON Editor Panel) -->
+            <section class="w-1/2 flex flex-col bg-white h-full">
+                <div class="p-2 border-b bg-gray-50 flex items-center justify-between text-xs">
+                    <div class="flex border rounded overflow-hidden">
+                        <button @click="editMode = 'form'" :class="editMode === 'form' ? 'bg-gray-800 text-white' : 'bg-white text-gray-600'" class="px-3 py-1 font-semibold">Form Editor</button>
+                        <button @click="editMode = 'raw'" :class="editMode === 'raw' ? 'bg-gray-800 text-white' : 'bg-white text-gray-600'" class="px-3 py-1 font-semibold">Raw JSON</button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button @click="saveJson" :disabled="!isSaveable" class="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded font-bold disabled:opacity-50 flex items-center gap-1 shadow-sm transition-all text-xs">
+                            Save Changes
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto bg-gray-200 p-4">
+                    <div v-if="statusMsg" :class="statusIsError ? 'bg-red-50 border-red-300 text-red-800' : 'bg-green-50 border-green-300 text-green-800'" class="mb-4 border p-3 rounded text-xs flex justify-between items-center">
+                        <span>{{ statusMsg }}</span>
+                        <button @click="statusMsg = ''" class="font-bold">x</button>
+                    </div>
+
+                    <!-- RAW JSON TEXTAREA -->
+                    <div v-if="editMode === 'raw'" class="h-full flex flex-col bg-white border rounded shadow-sm p-3">
+                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Structured Metadata Output</label>
+                        <textarea v-model="rawJsonText" class="w-full flex-1 border font-mono text-xs p-3 focus:outline-blue-500 rounded resize-none" placeholder="{}"></textarea>
+                    </div>
+
+                    <!-- FORM VISUAL PREVIEW AND CUSTOMDB FIELD SETUP -->
+                    <div v-if="editMode === 'form'" class="bg-white p-6 shadow-md border border-gray-300 w-full max-w-[900px] mx-auto text-black" style="font-family: Tahoma, sans-serif; font-size: 9pt;">
+                        <div class="text-lg font-bold text-gray-800 border-b-2 border-gray-800 pb-2 mb-4 tracking-widest uppercase">
+                            INVOICE METADATA
+                        </div>
+
+                        <!-- Buyer / Seller info -->
+                        <div class="grid grid-cols-2 gap-4 mb-6">
+                            <section>
+                                <b class="text-gray-500 text-[10px] uppercase tracking-wider block mb-1">Buyer (Client):</b>
+                                <input v-model="formFields.buyer.name" class="invoice-input w-full font-bold text-[10pt]" placeholder="Buyer Name" />
+                                <input v-model="formFields.buyer.address" class="invoice-input w-full mt-1" placeholder="Buyer Address" />
+                            </section>
+
+                            <section class="border-l border-gray-200 pl-4">
+                                <b class="text-rose-600 text-[10px] uppercase tracking-wider block mb-1">Seller (Vendor):</b>
+                                <input v-model="formFields.counterparty.name" class="invoice-input w-full font-bold text-[10pt]" placeholder="Seller Name" />
+                                <div class="flex flex-wrap items-center gap-1 mt-1">
+                                    <span class="text-gray-500 text-xs">Reg:</span>
+                                    <input v-model="formFields.counterparty.reg_num" class="invoice-input w-20 text-xs" />
+                                    <span class="text-gray-500 text-xs ml-2">VAT:</span>
+                                    <input v-model="formFields.counterparty.vat_num" class="invoice-input w-28 text-xs" />
+                                </div>
+                                <input v-model="formFields.counterparty.address" class="invoice-input w-full mt-1 text-xs" placeholder="Seller Address" />
+
+                                <div class="mt-1 flex items-center gap-1 text-xs">
+                                    <span class="text-gray-500 w-12">Bank 1:</span>
+                                    <input v-model="formFields.counterparty.bank" class="invoice-input w-20" placeholder="Bank" />
+                                    <input v-model="formFields.counterparty.iban" class="invoice-input flex-1 font-mono" placeholder="IBAN" />
+                                </div>
+                                <div class="mt-1 flex items-center gap-1 text-xs">
+                                    <span class="text-gray-500 w-12">Bank 2:</span>
+                                    <input v-model="formFields.counterparty.bank2" class="invoice-input w-20" placeholder="Bank 2" />
+                                    <input v-model="formFields.counterparty.iban2" class="invoice-input flex-1 font-mono" placeholder="IBAN 2" />
+                                </div>
+                            </section>
+                        </div>
+
+                        <!-- Invoice attributes -->
+                        <div class="grid grid-cols-[120px_1fr_120px_1fr] gap-x-3 gap-y-2 items-center mb-6 bg-gray-50 border border-gray-200 p-3">
+                            <label class="text-gray-500 text-xs text-right">Document #</label>
+                            <input v-model="formFields.doc_num" class="invoice-input font-bold w-full text-[10pt]" />
+                            <label class="text-gray-500 text-xs text-right">Reference #</label>
+                            <input v-model="formFields.ref_num" class="invoice-input font-bold w-full text-[10pt]" />
+                            <label class="text-gray-500 text-xs text-right">Document Date</label>
+                            <input v-model="formFields.doc_date" type="date" class="invoice-input font-bold w-full" />
+                            <label class="text-gray-500 text-xs text-right">Due Date</label>
+                            <input v-model="formFields.due_date" type="date" class="invoice-input font-bold w-full" />
+                        </div>
+
+                        <!-- Table Line Items -->
+                        <table width="100%" cellpadding="4" cellspacing="0" style="border: 1px solid black;" border="0" class="mb-2">
+                            <tr class="font-bold border-b border-black bg-gray-100 text-[8pt]">
+                                <td width="30%">Line Title</td>
+                                <td width="10%">Code</td>
+                                <td width="8%" align="center">Unit</td>
+                                <td width="8%" align="right">Qty</td>
+                                <td width="12%" align="right">Price</td>
+                                <td width="12%" align="right">Line Sum</td>
+                                <td width="12%" align="right" class="text-blue-700">VAT</td>
+                                <td width="12%" align="right" class="text-green-700">Total</td>
+                                <td width="4%"></td>
+                            </tr>
+                            <tr v-for="(itm, i) in formFields.items" :key="i" class="border-b border-gray-200 text-[8pt]">
+                                <td valign="top">
+                                    <input v-model="itm.title" class="invoice-input w-full font-bold mb-1" placeholder="Item name" />
+                                    <input v-model="itm.description" class="invoice-input w-full text-[7pt] italic text-gray-500" placeholder="Description/Specification" />
+                                </td>
+                                <td valign="top" class="pt-2"><input v-model="itm.code" class="invoice-input w-full font-mono text-[7pt]" /></td>
+                                <td valign="top" align="center" class="pt-2"><input v-model="itm.unit" class="invoice-input w-full text-center" /></td>
+                                <td valign="top" align="right" class="pt-2"><input v-model.number="itm.amount" type="number" step="0.001" @input="recalcItem(itm)" class="invoice-input w-full text-right" /></td>
+                                <td valign="top" align="right" class="pt-2"><input v-model.number="itm.item_price" type="number" step="0.01" @input="recalcItem(itm)" class="invoice-input w-full text-right" /></td>
+                                <td valign="top" align="right" class="pt-2"><input v-model.number="itm.item_sum" type="number" step="0.01" class="invoice-input w-full text-right font-bold" /></td>
+                                <td valign="top" align="right" class="pt-2"><input v-model.number="itm.vat_sum" type="number" step="0.01" class="invoice-input w-full text-right text-blue-700" /></td>
+                                <td valign="top" align="right" class="pt-2"><input v-model.number="itm.total_sum" type="number" step="0.01" class="invoice-input w-full text-right text-green-700 font-bold" /></td>
+                                <td valign="top" align="center" class="pt-2">
+                                    <button @click="removeLineItem(i)" class="text-red-500 hover:text-red-700 font-bold">x</button>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <button @click="addLineItem" class="text-blue-600 text-xs font-bold mb-6 hover:underline">+ Add Line Item</button>
+
+                        <!-- Totals Block -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <section class="border-r border-gray-200 pr-4">
+                                <label class="block text-[8pt] text-gray-500 mb-1">Invoice Remarks/Details:</label>
+                                <textarea v-model="formFields.description" class="invoice-input w-full font-bold h-16 border rounded p-1 text-[8pt]" placeholder="Additional terms..."></textarea>
+                                
+                                <label class="block text-[8pt] text-gray-500 mb-1 mt-2">Active Source File Path:</label>
+                                <input v-model="formFields.src_path" class="invoice-input w-full text-gray-500 font-mono text-[7pt] bg-gray-50 p-1" readonly />
+                            </section>
+
+                            <section class="grid grid-cols-[1fr_120px] gap-x-2 gap-y-2 items-end">
+                                <label class="text-right text-gray-600 text-[8pt]">Net items Sum:</label>
+                                <input v-model.number="formFields.items_sum" type="number" step="0.01" class="invoice-input w-full text-right font-bold" />
+                                
+                                <label class="text-right text-gray-600 text-[8pt]">VAT rate % / Sum:</label>
+                                <div class="flex items-center gap-1 justify-end">
+                                    <input v-model.number="formFields.vat_rate" type="number" class="invoice-input w-8 text-center" />%
+                                </div>
+                                <input v-model.number="formFields.vat_sum" type="number" step="0.01" class="invoice-input w-full text-right font-bold" />
+                                
+                                <label class="text-right text-gray-600 text-[8pt]">Round Adjust:</label>
+                                <input v-model.number="formFields.round_sum" type="number" step="0.01" class="invoice-input w-full text-right" />
+                                
+                                <label class="text-right text-[9pt] text-rose-800 pt-2 font-bold">Total Amount EUR:</label>
+                                <input v-model.number="formFields.total_sum" type="number" step="0.01" class="invoice-input w-full text-right text-[12pt] text-rose-700 font-bold" />
+                            </section>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Directory Browser Dialog Modal -->
+    <div v-if="showDirBrowserModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div class="p-4 border-b flex justify-between items-center">
+                <h3 class="font-bold text-base">Select Folder Directory</h3>
+                <button @click="showDirBrowserModal = false" class="text-gray-400 hover:text-gray-700 font-bold">X</button>
+            </div>
+            <div class="p-3 border-b bg-gray-50">
+                <div class="text-[10px] uppercase font-bold text-gray-400">Target Path</div>
+                <div class="font-mono text-xs break-all text-gray-700 select-all">{{ dbBrowse.path }}</div>
+                <div class="mt-2 flex gap-2">
+                    <button v-if="dbBrowse.parent" @click="loadDir(dbBrowse.parent)" class="px-3 py-1 bg-white border rounded text-xs hover:bg-gray-50 font-semibold">⬆ Parent Dir</button>
+                    <button @click="useCurrentDir" class="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-bold">Select This Directory</button>
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4 divide-y">
+                <div v-if="dbBrowse.error" class="p-3 text-red-800 bg-red-50 text-xs rounded mb-2">{{ dbBrowse.error }}</div>
+                <div v-if="!dbBrowse.directories.length" class="p-4 text-center text-xs text-gray-400">No sub-directories inside.</div>
+                <div v-for="dir in dbBrowse.directories" :key="dir" @click="loadDirJoin(dir)" class="py-2.5 px-2 hover:bg-gray-50 cursor-pointer text-xs font-mono text-gray-800">
+                    📁 {{ dir }}
+                </div>
+            </div>
+            <div class="p-3 bg-gray-50 border-t flex justify-end">
+                <button @click="showDirBrowserModal = false" class="px-4 py-2 border rounded bg-white hover:bg-gray-50 text-xs">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+const { createApp } = Vue;
+
+const DEFAULT_FORM_FIELDS = {
+    doc_num: '', doc_date: '', due_date: '', ref_num: '', description: '', src_path: '',
+    vat_rate: 0, items_sum: 0, vat_sum: 0, total_sum: 0, round_sum: 0,
+    buyer: { name: '', address: '' },
+    counterparty: { name: '', reg_num: '', vat_num: '', address: '', bank: '', iban: '', bank2: '', iban2: '' },
+    items: []
+};
+
+createApp({
+    data() {
+        return {
+            inputDir: localStorage.getItem('pair_input_dir') || '',
+            outputDir: localStorage.getItem('pair_output_dir') || '',
+            pairs: [],
+            sidebarOpen: true,
+            selectedPair: null,
+            activePair: null,
+            
+            // Visual preview states
+            activeDocName: '',
+            docSrc: '',
+            isPdf: false,
+            loadingDocument: false,
+            zoomLevel: 1.0,
+            panX: 0,
+            panY: 0,
+            isDragging: false,
+            startX: 0,
+            startY: 0,
+
+            // Text/Metadata visual editor fields
+            editMode: 'form',
+            formFields: JSON.parse(JSON.stringify(DEFAULT_FORM_FIELDS)),
+            activeOutputPath: '',
+
+            // Directory Browser states
+            showDirBrowserModal: false,
+            dirBrowserTarget: '', // 'input' or 'output'
+            dbBrowse: { path: '', parent: '', directories: [], error: '' },
+
+            // Feedback logs
+            statusMsg: '',
+            statusIsError: false
+        };
+    },
+    computed: {
+        rawJsonText: {
+            get() {
+                return JSON.stringify(this.formFields, null, 2);
+            },
+            set(val) {
+                try {
+                    this.formFields = JSON.parse(val);
+                    this.statusMsg = '';
+                } catch (e) {
+                    this.statusMsg = "Syntax Exception: Text contains invalid JSON markup.";
+                    this.statusIsError = true;
+                }
+            }
+        },
+        isSaveable() {
+            return this.activeOutputPath !== '';
+        }
+    },
+    mounted() {
+        if (this.inputDir && this.outputDir) {
+            this.scanDirectories();
+        }
+    },
+    methods: {
+        getFileName(path) {
+            if (!path) return '';
+            return path.split(/[/\\]/).pop();
+        },
+        // API Calls & Directory Management
+        async scanDirectories() {
+            if (!this.inputDir || !this.outputDir) {
+                this.showStatus("Please supply paths for both source directories.", true);
+                return;
+            }
+            localStorage.setItem('pair_input_dir', this.inputDir);
+            localStorage.setItem('pair_output_dir', this.outputDir);
+
+            try {
+                const q = new URLSearchParams({ input: this.inputDir, output: this.outputDir });
+                const r = await fetch(`/api/scan?${q.toString()}`);
+                if (!r.ok) throw new Error("Could not process mapping scan API request.");
+                const d = await r.json();
+                this.pairs = d.pairs || [];
+                if (this.pairs.length > 0) {
+                    this.showStatus(`Found ${this.pairs.length} synchronized document pairs.`, false);
+                } else {
+                    this.showStatus("No matching file pairs discovered. Ensure naming conventions align.", true);
+                }
+            } catch (err) {
+                this.showStatus(err.message, true);
+            }
+        },
+        selectPair(pair) {
+            this.selectedPair = pair;
+        },
+        async loadPairDetails(pair) {
+            this.activePair = pair;
+            this.activeDocName = this.getFileName(pair.input_path);
+            this.activeOutputPath = pair.output_path;
+            
+            // 1. Fetch file visual
+            this.loadingDocument = true;
+            this.docSrc = '';
+            this.isPdf = pair.input_path.toLowerCase().endsWith('.pdf');
+            const fileUrl = `/api/file?path=${encodeURIComponent(pair.input_path)}`;
+            
+            if (this.isPdf) {
+                try {
+                    const pdfData = await pdfjsLib.getDocument(fileUrl).promise;
+                    const page = await pdfData.getPage(1);
+                    const viewport = page.getViewport({ scale: 2.0 });
+                    const canvas = this.$refs.pdfCanvas;
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    
+                    await page.render({ canvasContext: context, viewport: viewport }).promise;
+                    this.docSrc = 'pdf'; // truthy value to show container
+                    this.resetZoom();
+                } catch (e) {
+                    this.showStatus(`Failed rendering PDF: ${e.message}`, true);
+                }
+            } else {
+                this.docSrc = fileUrl;
+            }
+            this.loadingDocument = false;
+
+            // 2. Fetch JSON content from output directory
+            try {
+                const response = await fetch(`/api/file?path=${encodeURIComponent(pair.output_path)}`);
+                if (response.ok) {
+                    const content = await response.json();
+                    this.formFields = this.sanitizeForm(content);
+                } else {
+                    this.formFields = JSON.parse(JSON.stringify(DEFAULT_FORM_FIELDS));
+                }
+            } catch (e) {
+                this.showStatus(`Error loading matching data file: ${e.message}`, true);
+            }
+        },
+        sanitizeForm(raw) {
+            const base = JSON.parse(JSON.stringify(DEFAULT_FORM_FIELDS));
+            const merged = { ...base, ...raw };
+            if (!merged.buyer || typeof merged.buyer !== 'object') merged.buyer = { ...base.buyer };
+            if (!merged.counterparty || typeof merged.counterparty !== 'object') merged.counterparty = { ...base.counterparty };
+            if (!Array.isArray(merged.items)) merged.items = [];
+            return merged;
+        },
+        async saveJson() {
+            if (!this.activeOutputPath) return;
+            try {
+                const response = await fetch('/api/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        path: this.activeOutputPath,
+                        content: this.formFields
+                    })
+                });
+                const res = await response.json();
+                if (response.ok && res.status === 'ok') {
+                    this.showStatus("Data successfully updated and saved locally.", false);
+                } else {
+                    throw new Error(res.error || "Execution error on backend write operations.");
+                }
+            } catch (err) {
+                this.showStatus(`Save failed: ${err.message}`, true);
+            }
+        },
+
+        // Directory Picker Modal methods
+        async openDirBrowser(target) {
+            this.dirBrowserTarget = target;
+            const startingPath = target === 'input' ? this.inputDir : this.outputDir;
+            await this.loadDir(startingPath);
+            this.showDirBrowserModal = true;
+        },
+        async loadDir(path) {
+            try {
+                const q = new URLSearchParams({ path: path || '' });
+                const r = await fetch(`/api/browse?${q.toString()}`);
+                if (!r.ok) throw new Error("Navigation API request failed.");
+                this.dbBrowse = await r.json();
+            } catch (e) {
+                this.dbBrowse.error = e.message;
+            }
+        },
+        loadDirJoin(sub) {
+            let p = this.dbBrowse.path;
+            if (!p.endsWith('/') && !p.endsWith('\\')) {
+                p += '/';
+            }
+            this.loadDir(p + sub);
+        },
+        useCurrentDir() {
+            if (this.dirBrowserTarget === 'input') {
+                this.inputDir = this.dbBrowse.path;
+            } else if (this.dirBrowserTarget === 'output') {
+                this.outputDir = this.dbBrowse.path;
+            }
+            this.showDirBrowserModal = false;
+        },
+
+        // Manual File Loading Fallback
+        triggerManualOpen() {
+            this.$refs.manualFileInput.click();
+        },
+        async handleManualFile(e) {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+
+            const name = file.name.toLowerCase();
+            this.activePair = null; // Unbind scanning pair context
+            
+            if (name.endsWith('.json')) {
+                this.activeOutputPath = ''; // clear output path to prevent accidental workspace scans overwriting
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    try {
+                        this.formFields = this.sanitizeForm(JSON.parse(evt.target.result));
+                        this.showStatus(`Loaded raw JSON configuration from ${file.name}`, false);
+                    } catch (err) {
+                        this.showStatus("Failed to parse local metadata JSON schema.", true);
+                    }
+                };
+                reader.readAsText(file);
+            } else if (name.endsWith('.pdf')) {
+                this.loadingDocument = true;
+                this.isPdf = true;
+                this.activeDocName = file.name;
+                const reader = new FileReader();
+                reader.onload = async (evt) => {
+                    try {
+                        const pdfData = await pdfjsLib.getDocument({ data: evt.target.result }).promise;
+                        const page = await pdfData.getPage(1);
+                        const viewport = page.getViewport({ scale: 2.0 });
+                        const canvas = this.$refs.pdfCanvas;
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+                        await page.render({ canvasContext: context, viewport: viewport }).promise;
+                        this.docSrc = 'pdf';
+                        this.resetZoom();
+                    } catch (err) {
+                        this.showStatus(`Error reading PDF file: ${err.message}`, true);
+                    } finally {
+                        this.loadingDocument = false;
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                // Images
+                this.isPdf = false;
+                this.activeDocName = file.name;
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    this.docSrc = evt.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+            e.target.value = ''; // Reset file input
+        },
+
+        // Interactive Invoice Form recalculations
+        addLineItem() {
+            this.formFields.items.push({
+                title: '', description: '', code: '', amount: 1, unit: 'pcs', item_price: 0.00, item_sum: 0.00, vat_sum: 0.00, total_sum: 0.00
+            });
+        },
+        removeLineItem(idx) {
+            this.formFields.items.splice(idx, 1);
+            this.recalcTotals();
+        },
+        recalcItem(itm) {
+            itm.amount = Number(itm.amount) || 0;
+            itm.item_price = Number(itm.item_price) || 0;
+            itm.item_sum = Number((itm.amount * itm.item_price).toFixed(2));
+            
+            const rate = Number(this.formFields.vat_rate) || 0;
+            itm.vat_sum = Number((itm.item_sum * (rate / 100)).toFixed(2));
+            itm.total_sum = Number((itm.item_sum + itm.vat_sum).toFixed(2));
+            
+            this.recalcTotals();
+        },
+        recalcTotals() {
+            let itemsSum = 0;
+            let vatSum = 0;
+            const rate = Number(this.formFields.vat_rate) || 0;
+
+            this.formFields.items.forEach(itm => {
+                itemsSum += Number(itm.item_sum) || 0;
+                vatSum += Number(itm.vat_sum) || 0;
+            });
+
+            this.formFields.items_sum = Number(itemsSum.toFixed(2));
+            this.formFields.vat_sum = Number(vatSum.toFixed(2));
+            
+            const round = Number(this.formFields.round_sum) || 0;
+            this.formFields.total_sum = Number((this.formFields.items_sum + this.formFields.vat_sum + round).toFixed(2));
+        },
+
+        // Pan & Zoom Mechanics
+        zoomIn() { this.zoomLevel = Math.min(5, this.zoomLevel + 0.15); },
+        zoomOut() { this.zoomLevel = Math.max(0.3, this.zoomLevel - 0.15); },
+        resetZoom() { this.zoomLevel = 1.0; this.panX = 0; this.panY = 0; },
+        handleWheel(e) {
+            const d = e.deltaY < 0 ? 0.1 : -0.1;
+            this.zoomLevel = Math.max(0.3, Math.min(5, this.zoomLevel + d));
+        },
+        startDrag(e) {
+            this.isDragging = true;
+            this.startX = e.clientX - this.panX;
+            this.startY = e.clientY - this.panY;
+        },
+        onDrag(e) {
+            if (this.isDragging) {
+                this.panX = e.clientX - this.startX;
+                this.panY = e.clientY - this.startY;
+            }
+        },
+        endDrag() {
+            this.isDragging = false;
+        },
+
+        // Interface Messaging Helper
+        showStatus(msg, isErr = false) {
+            this.statusMsg = msg;
+            this.statusIsError = isErr;
+            if (!isErr) {
+                setTimeout(() => {
+                    if (this.statusMsg === msg) this.statusMsg = '';
+                }, 4000);
+            }
+        }
+    }
+}).mount('#app');
+</script>
+</body>
+</html>

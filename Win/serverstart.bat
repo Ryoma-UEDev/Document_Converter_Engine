@@ -1,6 +1,6 @@
 @echo off
 setlocal
-cd /d %~dp0
+cd /d "%~dp0.."
 
 set "PYTHONNOUSERSITE=1"
 set "PYTHONPATH="
@@ -12,7 +12,7 @@ if exist ".standalone\python\python.exe" (
 if "%PYTHON_EXE%"=="" (
   if not exist .venv (
     echo Python environment missing.
-    echo Run setup_requirements.bat for standalone setup, or serversetup.bat if Python is already installed.
+    echo Run Win\setup_requirements.bat for standalone setup, or Win\serversetup.bat if Python is already installed.
     exit /b 1
   )
   call .venv\Scripts\activate.bat

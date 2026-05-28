@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableExtensions
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 set "PY_VERSION=3.12.10"
 set "PY_DIR=%CD%\.standalone\python"
@@ -76,5 +76,5 @@ if errorlevel 1 exit /b 1
 
 echo.
 echo Standalone setup complete.
-echo Run serverstart.bat to start the app.
+echo Run Win\serverstart.bat to start the app.
 endlocal

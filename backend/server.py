@@ -109,7 +109,6 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "inputDir": "",
         "outputDir": "",
         "mode": CUSTOMDB_MODE,
-        "pollSeconds": 10,
         "keepInputFiles": False,
     },
 }
@@ -737,14 +736,6 @@ def batch_browse(path: Optional[str] = None) -> Dict[str, Any]:
             "roots": roots,
             "directories": directories,
         }
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(400, str(exc)) from exc
-
-
-@app.post("/api/batch/start")
-def batch_start(payload: Dict[str, Any]) -> Dict[str, Any]:
-    try:
-        return batch_worker.start(payload)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(400, str(exc)) from exc
 

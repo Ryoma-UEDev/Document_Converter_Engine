@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableExtensions
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 set "OLLAMA_ROOT=%CD%\.standalone\ollama"
 set "OLLAMA_BIN=%OLLAMA_ROOT%\bin"
@@ -60,7 +60,7 @@ echo Models folder:
 echo %OLLAMA_MODELS%
 echo.
 echo To start the server, run:
-echo ollama_server_start.bat
+echo Win\ollama_server_start.bat
 echo.
 echo If you have a GGUF model from LM Studio, put it in:
 echo %OLLAMA_IMPORTS%

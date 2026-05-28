@@ -28,6 +28,12 @@
   "pipelineSettings": {
     "mode": "customdb"
   },
+  "batchSettings": {
+    "inputDir": "",
+    "outputDir": "",
+    "mode": "customdb",
+    "keepInputFiles": false
+  },
   "customDbSchema": {
     "doc_num": "",
     "doc_date": "YYYY-MM-DD",

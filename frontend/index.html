@@ -92,6 +92,20 @@
           <button v-if="j.status === 'completed'" @click="loadJobResult(j)" class="text-blue-600 underline mt-1">{{ t('loadResult') }}</button>
         </div>
       </div>
+      <div v-if="batchStatus.runDir || batchStatus.running || (batchStatus.items && batchStatus.items.length)" class="mt-3 border-t pt-3">
+        <div class="flex justify-between items-center text-xs mb-1">
+          <span class="font-bold">{{ t('batchMode') }}</span>
+          <span>{{ batchStatus.running ? t('running') : t('stopped') }}</span>
+        </div>
+        <div class="text-xs text-gray-600 truncate">{{ t('currentFile') }}: {{ batchStatus.currentFile || '-' }}</div>
+        <div class="text-xs text-gray-600">{{ t('processed') }}: {{ batchStatus.totals?.processed || 0 }} / {{ batchStatus.plannedCount || ((batchStatus.totals?.processed || 0) + (batchStatus.totals?.failed || 0)) || '-' }}</div>
+        <div class="w-full bg-gray-200 h-2 rounded mt-1"><div class="bg-emerald-600 h-2 rounded" :style="{width: batchProgressPercent + '%'}"></div></div>
+        <div class="mt-2 max-h-32 overflow-y-auto space-y-1">
+          <div v-for="item in recentBatchItems" :key="'monitor-' + item.time + item.file + item.status" class="border rounded p-1.5 text-xs">
+            <div class="flex justify-between gap-2"><span class="truncate">{{ item.file }}</span><span :class="item.status === 'completed' ? 'text-emerald-700' : 'text-red-700'">{{ item.status }}</span></div>
+          </div>
+        </div>
+      </div>
     </div>
 </div>
 
@@ -126,6 +140,7 @@
           <input ref="customDbTemplateFileInput" type="file" accept=".html,text/html" class="hidden" @change="handleCustomDbTemplateFile">
           <button @click="$refs.customDbTemplateFileInput.click()" class="px-3 py-2 border rounded bg-white text-gray-700 font-medium text-xs">{{ t('openTemplate') }}</button>
           <button @click="resetCustomDbViewerTemplate" class="px-3 py-2 border rounded bg-white text-gray-700 font-medium text-xs">{{ t('defaultTemplate') }}</button>
+          <button v-if="hasOcrResult" @click="showOcrResultModal = true" class="px-3 py-2 border rounded bg-white text-gray-700 font-medium text-xs">{{ t('ocrResult') }}</button>
           <button @click="exportCustomDb" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded shadow transition">{{ t('exportJson') }}</button>
         </div>
       </div>
@@ -173,9 +188,8 @@
           <p class="text-xs text-gray-500">{{ t('batchSubtitle') }}</p>
         </div>
         <div class="flex items-center gap-2">
-          <button @click="runBatchOnce" :disabled="isBatchBusy || batchStatus.running" class="px-3 py-2 border rounded bg-white text-gray-700 font-medium text-xs disabled:opacity-50">{{ t('runOnce') }}</button>
-          <button v-if="!batchStatus.running" @click="startBatchWorker" :disabled="isBatchBusy" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded shadow transition disabled:opacity-50">{{ t('startBatch') }}</button>
-          <button v-else @click="stopBatchWorker" :disabled="isBatchBusy" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded shadow transition disabled:opacity-50">{{ t('stopBatch') }}</button>
+          <button v-if="!batchStatus.running" @click="runBatchOnce" :disabled="isBatchBusy" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded shadow transition disabled:opacity-50">{{ t('runOnce') }}</button>
+          <button v-if="batchStatus.running" @click="stopBatchWorker" :disabled="isBatchBusy" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded shadow transition disabled:opacity-50">{{ t('stopBatch') }}</button>
         </div>
       </div>
       <div class="bg-white border rounded shadow-sm p-4 space-y-4">
@@ -194,7 +208,6 @@
             <span>{{ t('keepFilesInRoot') }}</span>
           </label>
           <div><label class="text-xs font-bold">{{ t('batchConversionMode') }}</label><select v-model="batchConfig.mode" class="w-full border p-2 rounded bg-white text-sm"><option value="customdb">{{ t('customDbMode') }}</option><option value="xml">{{ t('xmlMode') }}</option><option value="dynamic">{{ t('dynamicMode') }}</option></select></div>
-          <div><label class="text-xs font-bold">{{ t('pollSeconds') }}</label><input v-model.number="batchConfig.pollSeconds" type="number" min="2" class="w-full border p-2 rounded font-mono text-xs"></div>
         </div>
         <p class="text-xs text-gray-500">{{ t('batchFolderHelp') }}</p>
         <div class="grid grid-cols-3 gap-3 text-xs">
@@ -353,6 +366,17 @@
     </div>
   </div>
 </div>
+<div v-if="showOcrResultModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+  <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col">
+    <div class="p-5 border-b flex justify-between items-center">
+      <h3 class="font-bold text-lg">{{ t('ocrResult') }}</h3>
+      <button @click="showOcrResultModal = false" class="text-gray-400 hover:text-gray-700 font-bold">X</button>
+    </div>
+    <div class="p-4 overflow-auto flex-1">
+      <pre class="whitespace-pre-wrap break-words font-mono text-xs bg-gray-50 border rounded p-3 min-h-[360px]">{{ rawOcrText }}</pre>
+    </div>
+  </div>
+</div>
 <div v-if="showDirectoryBrowser" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
   <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
     <div class="p-5 border-b flex justify-between items-center">
@@ -441,12 +465,12 @@ const app = createApp({
     return {
       backendBase: localStorage.getItem('split_backend_base') || window.location.origin,
       uiLang: initialLang,
-      showSettings:false,showOverrideConfirm:false,showSchemaAppliedConfirm:false,settingsTab:'ai',settingsError:'',isProcessing:false,ocrStatus:'',errorMsg:'',
+      showSettings:false,showOverrideConfirm:false,showSchemaAppliedConfirm:false,showOcrResultModal:false,settingsTab:'ai',settingsError:'',isProcessing:false,ocrStatus:'',errorMsg:'',
       filePreview:null,fileName:'',fileObj:null,currentJob:null,
       zoomLevel:1,panX:0,panY:0,isDragging:false,startX:0,startY:0,
       activeTab:'customdb',availableOpenAiModels:[],availableOllamaModels:[],availableLMStudioModels:[],availableOcrOpenAiModels:[],availableOcrOllamaModels:[],availableOcrLMStudioModels:[],isProbingModels:false,
       modelPicker:{openAiModel:'',ollamaModel:'',lmStudioModel:'',ocrOpenAiModel:'',ocrOllamaModel:'',ocrLmStudioModel:''},
-      settings: { provider:'openai', openAiBaseUrl:'https://api.openai.com/v1', openAiKey:'', openAiModel:'gpt-4o-mini', ollamaUrl:'http://localhost:11434/v1', ollamaModel:'', lmStudioUrl:'http://localhost:1234', lmStudioModel:'', ocrProvider:'none', ocrMode:'none', googleVisionKey:'', ocrOpenAiBaseUrl:'https://api.openai.com/v1', ocrOpenAiKey:'', ocrOpenAiModel:'', ocrOllamaUrl:'http://localhost:11434/v1', ocrOllamaModel:'', ocrLmStudioUrl:'http://localhost:1234', ocrLmStudioModel:'', maxTokens:2048, ollamaMaxTokens:8192, ocrMaxTokens:4096, ocrOllamaMaxTokens:8192, xmlPrompt:'', customDbPrompt:'', dynamicPrompt:'', ocrPrompt:'', customDbSchema: JSON.parse(JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA)), customJsonMapping:{}, pipelineSettings:{mode:'customdb'}, batchSettings:{inputDir:'',outputDir:'',mode:'customdb',pollSeconds:10,keepInputFiles:false} },
+      settings: { provider:'openai', openAiBaseUrl:'https://api.openai.com/v1', openAiKey:'', openAiModel:'gpt-4o-mini', ollamaUrl:'http://localhost:11434/v1', ollamaModel:'', lmStudioUrl:'http://localhost:1234', lmStudioModel:'', ocrProvider:'none', ocrMode:'none', googleVisionKey:'', ocrOpenAiBaseUrl:'https://api.openai.com/v1', ocrOpenAiKey:'', ocrOpenAiModel:'', ocrOllamaUrl:'http://localhost:11434/v1', ocrOllamaModel:'', ocrLmStudioUrl:'http://localhost:1234', ocrLmStudioModel:'', maxTokens:2048, ollamaMaxTokens:8192, ocrMaxTokens:4096, ocrOllamaMaxTokens:8192, xmlPrompt:'', customDbPrompt:'', dynamicPrompt:'', ocrPrompt:'', customDbSchema: JSON.parse(JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA)), customJsonMapping:{}, pipelineSettings:{mode:'customdb'}, batchSettings:{inputDir:'',outputDir:'',mode:'customdb',keepInputFiles:false} },
       schemaDraft: JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA, null, 2),
       mappingDraft: '{}',
       mappingModel:{},
@@ -465,9 +489,10 @@ const app = createApp({
         items:[{ title:'', description:'', code:'', amount:1, unit:'', item_price:0, item_sum:0, vat_sum:0, total_sum:0 }]
       },
       dynamicText:'',
+      rawOcrText:'',
       dynamicFilterDuplicates: localStorage.getItem('dynamic_filter_duplicates') === '1',
-      batchConfig:{inputDir:'',outputDir:'',mode:'customdb',pollSeconds:10,keepInputFiles:false},
-      batchStatus:{running:false,config:{},totals:{processed:0,failed:0},items:[],currentFile:'',lastError:''},
+      batchConfig:{inputDir:'',outputDir:'',mode:'customdb',keepInputFiles:false},
+      batchStatus:{running:false,config:{},totals:{processed:0,failed:0},items:[],currentFile:'',lastError:'',plannedCount:0},
       batchError:'',
       isBatchBusy:false,
       showDirectoryBrowser:false,
@@ -481,6 +506,17 @@ const app = createApp({
     xmlText: { get() { return JSON.stringify(this.xmlForm, null, 2); }, set(v) { try { this.xmlForm = JSON.parse(v || '{}'); } catch(e){} } },
     customDbText: { get() { return JSON.stringify(this.customDbForm, null, 2); }, set(v) { try { this.customDbForm = JSON.parse(v || '{}'); } catch(e){} } },
     dynamicOutputText() { return this.dynamicFilterDuplicates ? this.filterDuplicateLines(this.dynamicText) : this.dynamicText; },
+    hasOcrResult() { return typeof this.rawOcrText === 'string' && this.rawOcrText.trim().length > 0; },
+    batchProgressPercent() {
+      const processed = Number(this.batchStatus?.totals?.processed || 0);
+      const failed = Number(this.batchStatus?.totals?.failed || 0);
+      const planned = Number(this.batchStatus?.plannedCount || 0);
+      if (!planned) return this.batchStatus?.running ? 5 : 0;
+      return Math.min(100, Math.round(((processed + failed) / planned) * 100));
+    },
+    recentBatchItems() {
+      return Array.isArray(this.batchStatus?.items) ? this.batchStatus.items.slice(-5).reverse() : [];
+    },
     dynamicVisibleText: {
       get() { return this.dynamicOutputText; },
       set(v) { this.dynamicText = v; }
@@ -713,7 +749,7 @@ const app = createApp({
       if (!Number.isFinite(Number(this.settings.ocrOllamaMaxTokens)) || Number(this.settings.ocrOllamaMaxTokens) <= 0) this.settings.ocrOllamaMaxTokens = 8192;
       if (!this.isPlainObject(this.settings.customDbSchema)) this.settings.customDbSchema = this.clone(DEFAULT_CUSTOMDB_SCHEMA);
       if (!this.isPlainObject(this.settings.customJsonMapping)) this.settings.customJsonMapping = {};
-      if (!this.isPlainObject(this.settings.batchSettings)) this.settings.batchSettings = { inputDir:'', outputDir:'', mode:'customdb', pollSeconds:10, keepInputFiles:false };
+      if (!this.isPlainObject(this.settings.batchSettings)) this.settings.batchSettings = { inputDir:'', outputDir:'', mode:'customdb', keepInputFiles:false };
       this.batchConfig = { ...this.batchConfig, ...this.settings.batchSettings };
       if (!this.isPlainObject(this.settings.pipelineSettings)) this.settings.pipelineSettings = { mode: this.activeTab || 'customdb' };
       this.settings.pipelineSettings.mode = this.normalizeMode(this.settings.pipelineSettings.mode);
@@ -924,7 +960,7 @@ const app = createApp({
     startDrag(e) { this.isDragging=true; this.startX=e.clientX-this.panX; this.startY=e.clientY-this.panY; },
     onDrag(e) { if(this.isDragging){ this.panX=e.clientX-this.startX; this.panY=e.clientY-this.startY; } },
     endDrag() { this.isDragging=false; }, zoomIn() { this.zoomLevel=Math.min(5,this.zoomLevel+0.2); }, zoomOut() { this.zoomLevel=Math.max(0.5,this.zoomLevel-0.2); }, resetZoom() { this.zoomLevel=1; this.panX=0; this.panY=0; },
-    clearFile() { this.filePreview=null; this.fileObj=null; this.currentJob=null; this.resetZoom(); },
+    clearFile() { this.filePreview=null; this.fileObj=null; this.currentJob=null; this.rawOcrText=''; this.showOcrResultModal=false; this.resetZoom(); },
     handleDrop(e) { this.processFile(e.dataTransfer.files[0]); },
     handleFileSelect(e) { this.processFile(e.target.files[0]); },
     async processFile(f) {
@@ -942,6 +978,7 @@ const app = createApp({
       if (this.activeTab === 'batch') return;
       if (!this.applyDraftSettings()) return;
       this.isProcessing = true; this.ocrStatus = this.t('submittingJob'); this.errorMsg = '';
+      this.rawOcrText = ''; this.showOcrResultModal = false;
       try {
         const fd = new FormData();
         fd.append('file', this.fileObj);
@@ -978,7 +1015,6 @@ const app = createApp({
         inputDir: this.batchConfig.inputDir || '',
         outputDir: this.batchConfig.outputDir || '',
         mode: this.batchConfig.mode || 'customdb',
-        pollSeconds: Number(this.batchConfig.pollSeconds) || 10,
         keepInputFiles: Boolean(this.batchConfig.keepInputFiles)
       };
     },
@@ -1015,14 +1051,6 @@ const app = createApp({
       if (this.directoryBrowserTarget && this.directoryBrowser.path) this.batchConfig[this.directoryBrowserTarget] = this.directoryBrowser.path;
       this.showDirectoryBrowser = false;
     },
-    async startBatchWorker() {
-      this.isBatchBusy = true; this.batchError = '';
-      try {
-        const r = await fetch(`${this.apiBase()}/api/batch/start`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(this.batchPayload()) });
-        if (!r.ok) throw new Error(await r.text());
-        this.syncBatchStatus(await r.json());
-      } catch(e) { this.batchError = e.message; } finally { this.isBatchBusy = false; }
-    },
     async stopBatchWorker() {
       this.isBatchBusy = true; this.batchError = '';
       try {
@@ -1040,6 +1068,8 @@ const app = createApp({
       } catch(e) { this.batchError = e.message; } finally { this.isBatchBusy = false; }
     },
     loadJobResult(job) {
+      this.rawOcrText = typeof job.raw_ocr_text === 'string' ? job.raw_ocr_text : '';
+      this.showOcrResultModal = false;
       if (job.mode === 'customdb') {
         const parsed = this.coerceJsonObject(job.result) || this.coerceJsonObject(job.raw_response);
         if (!parsed) {
