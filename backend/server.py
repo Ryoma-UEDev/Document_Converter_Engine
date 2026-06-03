@@ -85,6 +85,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "ocrProvider": "none",
     "ocrMode": "none",
     "googleVisionKey": "",
+    "googleVisionTextMode": "full_text",
     "ocrOpenAiBaseUrl": "https://api.openai.com/v1",
     "ocrOpenAiKey": "",
     "ocrOpenAiModel": "",
@@ -151,6 +152,8 @@ def normalize_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
     settings["provider"] = normalize_provider(settings.get("provider"))
     settings["ocrProvider"] = normalize_ocr_provider(settings)
     settings["ocrMode"] = settings["ocrProvider"]
+    if settings.get("googleVisionTextMode") not in ("full_text", "paragraphs"):
+        settings["googleVisionTextMode"] = DEFAULT_SETTINGS["googleVisionTextMode"]
 
     if not settings.get("ocrOpenAiBaseUrl"):
         settings["ocrOpenAiBaseUrl"] = settings.get("openAiBaseUrl", DEFAULT_SETTINGS["openAiBaseUrl"])
@@ -355,7 +358,29 @@ def _openai_chat(
         raise
 
 
-def _google_ocr(api_key: str, base64_image: str) -> str:
+def _google_ocr_paragraph_text(response: Dict[str, Any]) -> str:
+    annotation = response.get("fullTextAnnotation", {})
+    pages = annotation.get("pages", [])
+    if not pages:
+        return annotation.get("text", "")
+
+    lines: List[str] = []
+    for page in pages:
+        for block in page.get("blocks", []):
+            for paragraph in block.get("paragraphs", []):
+                words: List[str] = []
+                for word in paragraph.get("words", []):
+                    word_text = "".join(symbol.get("text", "") for symbol in word.get("symbols", []))
+                    if word_text:
+                        words.append(word_text)
+                line = " ".join(words)
+                if line.strip():
+                    lines.append(line)
+            lines.append("")
+    return "\n".join(lines).strip()
+
+
+def _google_ocr(api_key: str, base64_image: str, text_mode: str = "full_text") -> Dict[str, Any]:
     if not api_key:
         raise ValueError("Missing Google Vision key")
     r = requests.post(
@@ -372,7 +397,15 @@ def _google_ocr(api_key: str, base64_image: str) -> str:
     )
     r.raise_for_status()
     data = r.json()
-    return data["responses"][0].get("fullTextAnnotation", {}).get("text", "")
+    response = data["responses"][0]
+    if text_mode == "paragraphs":
+        text = _google_ocr_paragraph_text(response)
+    else:
+        text = response.get("fullTextAnnotation", {}).get("text", "")
+    return {
+        "text": text,
+        "response": response,
+    }
 
 
 def _render_schema_prompt(prompt: str, settings: Dict[str, Any]) -> Dict[str, Any]:
@@ -530,10 +563,17 @@ def _run_conversion(mode: str, base64_image: str, settings: Dict[str, Any]) -> D
     prompt = _extract_mode_prompt(mode, settings)
     doc_text: Optional[str] = None
     raw_ocr = ""
+    raw_ocr_response: Any = None
 
     ocr_provider = normalize_ocr_provider(settings)
     if ocr_provider == "google":
-        raw_ocr = _google_ocr(settings.get("googleVisionKey", ""), base64_image)
+        google_ocr = _google_ocr(
+            settings.get("googleVisionKey", ""),
+            base64_image,
+            settings.get("googleVisionTextMode", "full_text"),
+        )
+        raw_ocr = str(google_ocr.get("text", ""))
+        raw_ocr_response = google_ocr.get("response")
         doc_text = raw_ocr
     elif ocr_provider in ("ollama", "lmstudio", "openai"):
         raw_ocr = _run_vlm_ocr(settings, base64_image)
@@ -553,6 +593,7 @@ def _run_conversion(mode: str, base64_image: str, settings: Dict[str, Any]) -> D
         "result": parsed,
         "raw_response": out,
         "raw_ocr_text": raw_ocr,
+        "raw_ocr_response": raw_ocr_response,
     }
 
 
@@ -577,6 +618,7 @@ def _process_job(job_id: str, mode: str, base64_image: str, settings: Dict[str, 
             result=conversion["result"],
             raw_response=conversion["raw_response"],
             raw_ocr_text=conversion["raw_ocr_text"],
+            raw_ocr_response=conversion["raw_ocr_response"],
             completed_at=utc_now(),
         )
     except Exception as exc:  # noqa: BLE001
@@ -793,6 +835,7 @@ async def create_job(
         "result": None,
         "raw_response": "",
         "raw_ocr_text": "",
+        "raw_ocr_response": None,
         "error": "",
         "created_at": utc_now(),
         "updated_at": utc_now(),

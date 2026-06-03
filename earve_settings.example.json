@@ -10,6 +10,7 @@
   "ocrProvider": "none",
   "ocrMode": "none",
   "googleVisionKey": "",
+  "googleVisionTextMode": "full_text",
   "ocrOpenAiBaseUrl": "https://api.openai.com/v1",
   "ocrOpenAiKey": "",
   "ocrOpenAiModel": "",

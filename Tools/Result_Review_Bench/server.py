@@ -1,7 +1,18 @@
 import http.server
+import argparse
 import json
 import os
 import urllib.parse
+
+def get_roots():
+    if os.name == 'nt':
+        roots = []
+        for letter in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
+            drive = f'{letter}:\\'
+            if os.path.exists(drive):
+                roots.append(drive)
+        return roots
+    return ['/']
 
 class DocumentHandler(http.server.SimpleHTTPRequestHandler):
     def send_json(self, data, status=200):
@@ -25,16 +36,38 @@ class DocumentHandler(http.server.SimpleHTTPRequestHandler):
         elif url.path == '/api/browse':
             path = params.get('path', [''])[0] or os.getcwd()
             try:
+                path = os.path.abspath(os.path.expanduser(path))
                 items = os.listdir(path)
                 dirs = [d for d in items if os.path.isdir(os.path.join(path, d))]
                 res = {
-                    'path': os.path.abspath(path),
+                    'path': path,
                     'directories': sorted(dirs),
-                    'parent': os.path.dirname(os.path.abspath(path)) if os.path.abspath(path) != os.path.dirname(os.path.abspath(path)) else ''
+                    'parent': os.path.dirname(path) if path != os.path.dirname(path) else '',
+                    'home': os.path.expanduser('~'),
+                    'cwd': os.getcwd(),
+                    'roots': get_roots(),
+                    'separator': os.sep
                 }
             except Exception as e:
-                res = {'error': str(e), 'path': path, 'directories': [], 'parent': ''}
+                res = {'error': str(e), 'path': path, 'directories': [], 'parent': '', 'home': os.path.expanduser('~'), 'cwd': os.getcwd(), 'roots': get_roots(), 'separator': os.sep}
             self.send_json(res)
+
+        elif url.path == '/api/pick-folder':
+            start_path = params.get('path', [''])[0] or os.getcwd()
+            if not os.path.isdir(start_path):
+                start_path = os.getcwd()
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+
+                root = tk.Tk()
+                root.withdraw()
+                root.attributes('-topmost', True)
+                selected = filedialog.askdirectory(initialdir=start_path, title='Select folder')
+                root.destroy()
+                self.send_json({'path': os.path.abspath(selected) if selected else '', 'cancelled': not bool(selected)})
+            except Exception as e:
+                self.send_json({'error': str(e), 'path': '', 'cancelled': False}, status=500)
             
         elif url.path == '/api/scan':
             inp_dir = params.get('input', [''])[0]
@@ -92,7 +125,11 @@ class DocumentHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json({'error': 'Invalid arguments'}, status=400)
 
 if __name__ == '__main__':
-    server_address = ('', 8000)
+    parser = argparse.ArgumentParser(description='Result Review Bench local server')
+    parser.add_argument('--port', type=int, default=8050)
+    args = parser.parse_args()
+
+    server_address = ('', args.port)
     httpd = http.server.HTTPServer(server_address, DocumentHandler)
-    print("Serving on http://localhost:8000 ...")
+    print(f"Serving on http://localhost:{args.port} ...")
     httpd.serve_forever()

@@ -260,7 +260,7 @@
     </div>
 
     <!-- Directory Browser Dialog Modal -->
-    <div v-if="showDirBrowserModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div v-if="false && showDirBrowserModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
             <div class="p-4 border-b flex justify-between items-center">
                 <h3 class="font-bold text-base">Select Folder Directory</h3>
@@ -282,6 +282,49 @@
                 </div>
             </div>
             <div class="p-3 bg-gray-50 border-t flex justify-end">
+                <button @click="showDirBrowserModal = false" class="px-4 py-2 border rounded bg-white hover:bg-gray-50 text-xs">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Improved fallback directory browser. Native OS picker is still tried first. -->
+    <div v-if="showDirBrowserModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded shadow-xl w-full max-w-4xl h-[80vh] flex flex-col">
+            <div class="p-4 border-b flex justify-between items-center bg-gray-900 text-white">
+                <div>
+                    <h3 class="font-bold text-base">Select Folder</h3>
+                    <p class="text-[11px] text-gray-300 mt-0.5">Native picker was unavailable, so this browser is using the local Python server.</p>
+                </div>
+                <button @click="showDirBrowserModal = false" class="text-gray-300 hover:text-white font-bold text-lg">X</button>
+            </div>
+            <div class="p-3 border-b bg-gray-50 space-y-3">
+                <form @submit.prevent="loadDir(dbPathInput)" class="flex gap-2">
+                    <input v-model="dbPathInput" class="flex-1 border rounded px-3 py-2 font-mono text-xs outline-blue-500 bg-white" placeholder="Type or paste a folder path">
+                    <button type="submit" class="px-4 py-2 bg-gray-800 text-white rounded text-xs font-bold hover:bg-gray-900">Go</button>
+                    <button type="button" @click="useCurrentDir" class="px-4 py-2 bg-blue-600 text-white rounded text-xs font-bold hover:bg-blue-700">Select</button>
+                </form>
+                <div class="flex flex-wrap gap-2 items-center">
+                    <button v-if="dbBrowse.parent" @click="loadDir(dbBrowse.parent)" class="px-3 py-1.5 bg-white border rounded text-xs hover:bg-gray-100 font-semibold">Up</button>
+                    <button @click="loadDir(dbBrowse.home)" class="px-3 py-1.5 bg-white border rounded text-xs hover:bg-gray-100 font-semibold">Home</button>
+                    <button @click="loadDir(dbBrowse.cwd)" class="px-3 py-1.5 bg-white border rounded text-xs hover:bg-gray-100 font-semibold">Tool Folder</button>
+                    <button @click="loadDir(dbBrowse.path)" class="px-3 py-1.5 bg-white border rounded text-xs hover:bg-gray-100 font-semibold">Refresh</button>
+                    <div class="h-5 border-l mx-1"></div>
+                    <button v-for="root in dbBrowse.roots" :key="root" @click="loadDir(root)" class="px-3 py-1.5 bg-white border rounded text-xs hover:bg-gray-100 font-mono font-semibold">
+                        {{ root }}
+                    </button>
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto p-3 bg-white">
+                <div v-if="dbBrowse.error" class="p-3 text-red-800 bg-red-50 text-xs rounded mb-2">{{ dbBrowse.error }}</div>
+                <div v-if="!dbBrowse.directories.length" class="p-4 text-center text-xs text-gray-400">No sub-directories inside.</div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
+                    <button v-for="dir in dbBrowse.directories" :key="dir" @click="loadDirJoin(dir)" class="text-left px-3 py-2 hover:bg-blue-50 rounded border border-transparent hover:border-blue-100 text-xs font-mono text-gray-800 truncate">
+                        [dir] {{ dir }}
+                    </button>
+                </div>
+            </div>
+            <div class="p-3 bg-gray-50 border-t flex items-center justify-between">
+                <div class="font-mono text-[11px] text-gray-500 truncate pr-4">{{ dbBrowse.path }}</div>
                 <button @click="showDirBrowserModal = false" class="px-4 py-2 border rounded bg-white hover:bg-gray-50 text-xs">Cancel</button>
             </div>
         </div>
@@ -330,7 +373,8 @@ createApp({
             // Directory Browser states
             showDirBrowserModal: false,
             dirBrowserTarget: '', // 'input' or 'output'
-            dbBrowse: { path: '', parent: '', directories: [], error: '' },
+            dbBrowse: { path: '', parent: '', directories: [], error: '', home: '', cwd: '', roots: [], separator: '/' },
+            dbPathInput: '',
 
             // Feedback logs
             statusMsg: '',
@@ -472,6 +516,24 @@ createApp({
         async openDirBrowser(target) {
             this.dirBrowserTarget = target;
             const startingPath = target === 'input' ? this.inputDir : this.outputDir;
+            try {
+                const q = new URLSearchParams({ path: startingPath || '' });
+                const r = await fetch(`/api/pick-folder?${q.toString()}`);
+                const d = await r.json();
+                if (r.ok && d.path) {
+                    if (target === 'input') {
+                        this.inputDir = d.path;
+                    } else {
+                        this.outputDir = d.path;
+                    }
+                    return;
+                }
+                if (r.ok && d.cancelled) {
+                    return;
+                }
+            } catch (e) {
+                // Fall back to the browser-safe server-side directory picker.
+            }
             await this.loadDir(startingPath);
             this.showDirBrowserModal = true;
         },
@@ -481,14 +543,16 @@ createApp({
                 const r = await fetch(`/api/browse?${q.toString()}`);
                 if (!r.ok) throw new Error("Navigation API request failed.");
                 this.dbBrowse = await r.json();
+                this.dbPathInput = this.dbBrowse.path || '';
             } catch (e) {
                 this.dbBrowse.error = e.message;
             }
         },
         loadDirJoin(sub) {
             let p = this.dbBrowse.path;
+            const sep = this.dbBrowse.separator || '/';
             if (!p.endsWith('/') && !p.endsWith('\\')) {
-                p += '/';
+                p += sep;
             }
             this.loadDir(p + sub);
         },

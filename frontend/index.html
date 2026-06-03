@@ -140,7 +140,7 @@
           <input ref="customDbTemplateFileInput" type="file" accept=".html,text/html" class="hidden" @change="handleCustomDbTemplateFile">
           <button @click="$refs.customDbTemplateFileInput.click()" class="px-3 py-2 border rounded bg-white text-gray-700 font-medium text-xs">{{ t('openTemplate') }}</button>
           <button @click="resetCustomDbViewerTemplate" class="px-3 py-2 border rounded bg-white text-gray-700 font-medium text-xs">{{ t('defaultTemplate') }}</button>
-          <button v-if="hasOcrResult" @click="showOcrResultModal = true" class="px-3 py-2 border rounded bg-white text-gray-700 font-medium text-xs">{{ t('ocrResult') }}</button>
+          <button v-if="hasOcrResult" @click="openOcrResultModal" class="px-3 py-2 border rounded bg-white text-gray-700 font-medium text-xs">{{ t('ocrResult') }}</button>
           <button @click="exportCustomDb" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded shadow transition">{{ t('exportJson') }}</button>
         </div>
       </div>
@@ -271,7 +271,10 @@
           <h3 class="font-bold text-gray-800 mb-2">{{ t('ocrPreProcessing') }}</h3>
           <label class="block text-xs font-bold mb-1">{{ t('ocrProvider') }}</label>
           <select v-model="settings.ocrProvider" class="w-full border p-2 rounded bg-white text-sm mb-3"><option value="none">{{ t('ocrProviderNone') }}</option><option value="google">{{ t('ocrProviderGoogle') }}</option><option value="ollama">{{ t('ocrProviderOllama') }}</option><option value="lmstudio">{{ t('ocrProviderLmStudio') }}</option><option value="openai">{{ t('ocrProviderOpenAi') }}</option></select>
-          <div v-if="settings.ocrProvider === 'google'" class="ml-2 pl-4 border-l-2 border-blue-400"><label class="block text-xs font-bold mb-1">{{ t('googleCloudApiKey') }}</label><input type="text" v-model="settings.googleVisionKey" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other" class="w-full border p-2 rounded font-mono text-sm secret-input"></div>
+          <div v-if="settings.ocrProvider === 'google'" class="ml-2 pl-4 border-l-2 border-blue-400 space-y-3">
+            <div><label class="block text-xs font-bold mb-1">{{ t('googleCloudApiKey') }}</label><input type="text" v-model="settings.googleVisionKey" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other" class="w-full border p-2 rounded font-mono text-sm secret-input"></div>
+            <div><label class="block text-xs font-bold mb-1">{{ t('googleVisionTextMode') }}</label><select v-model="settings.googleVisionTextMode" class="w-full border p-2 rounded bg-white text-sm"><option value="full_text">{{ t('googleVisionModeFullText') }}</option><option value="paragraphs">{{ t('googleVisionModeParagraphs') }}</option></select></div>
+          </div>
           <div v-if="settings.ocrProvider === 'ollama'" class="ml-2 pl-4 border-l-2 border-emerald-400 space-y-3">
             <div><label class="block text-xs font-bold mb-1">{{ t('ocrOllamaBaseUrl') }}</label><input type="text" v-model="settings.ocrOllamaUrl" class="w-full border p-2 rounded font-mono text-sm"></div>
             <div><label class="block text-xs font-bold mb-1">{{ t('ocrOllamaModel') }}</label><div class="flex gap-2"><input type="text" v-model="settings.ocrOllamaModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-model="modelPicker.ocrOllamaModel" @change="applyPickedModel('ocrOllamaModel')" class="w-56 border p-2 rounded bg-white font-mono text-sm"><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableOcrOllamaModels" :key="'ocr-ollama-' + m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeOcrOllamaModels" :disabled="isProbingModels" class="px-4 py-2 bg-emerald-600 text-white rounded">{{ t('probe') }}</button></div></div>
@@ -372,8 +375,21 @@
       <h3 class="font-bold text-lg">{{ t('ocrResult') }}</h3>
       <button @click="showOcrResultModal = false" class="text-gray-400 hover:text-gray-700 font-bold">X</button>
     </div>
-    <div class="p-4 overflow-auto flex-1">
-      <pre class="whitespace-pre-wrap break-words font-mono text-xs bg-gray-50 border rounded p-3 min-h-[360px]">{{ rawOcrText }}</pre>
+    <div class="p-4 overflow-auto flex-1 space-y-3">
+      <div class="border rounded bg-white overflow-hidden">
+        <div class="flex justify-between items-center gap-3 p-3 bg-gray-50 border-b">
+          <button @click="ocrPreviewOpen.raw = !ocrPreviewOpen.raw" class="font-bold text-sm text-gray-700">{{ ocrPreviewOpen.raw ? '-' : '+' }} {{ t('rawOcrResponse') }}</button>
+          <button @click="copyText(rawOcrResponseText || t('rawOcrResponseUnavailable'))" class="px-3 py-1 border rounded bg-white text-xs font-medium">{{ t('copy') }}</button>
+        </div>
+        <pre v-if="ocrPreviewOpen.raw" class="whitespace-pre-wrap break-words font-mono text-xs bg-white p-3 max-h-[360px] overflow-auto">{{ rawOcrResponseText || t('rawOcrResponseUnavailable') }}</pre>
+      </div>
+      <div class="border rounded bg-white overflow-hidden">
+        <div class="flex justify-between items-center gap-3 p-3 bg-gray-50 border-b">
+          <button @click="ocrPreviewOpen.parsed = !ocrPreviewOpen.parsed" class="font-bold text-sm text-gray-700">{{ ocrPreviewOpen.parsed ? '-' : '+' }} {{ t('parsedOcrText') }}</button>
+          <button @click="copyText(rawOcrText)" class="px-3 py-1 border rounded bg-white text-xs font-medium">{{ t('copy') }}</button>
+        </div>
+        <pre v-if="ocrPreviewOpen.parsed" class="whitespace-pre-wrap break-words font-mono text-xs bg-white p-3 max-h-[360px] overflow-auto">{{ rawOcrText }}</pre>
+      </div>
     </div>
   </div>
 </div>
@@ -470,7 +486,7 @@ const app = createApp({
       zoomLevel:1,panX:0,panY:0,isDragging:false,startX:0,startY:0,
       activeTab:'customdb',availableOpenAiModels:[],availableOllamaModels:[],availableLMStudioModels:[],availableOcrOpenAiModels:[],availableOcrOllamaModels:[],availableOcrLMStudioModels:[],isProbingModels:false,
       modelPicker:{openAiModel:'',ollamaModel:'',lmStudioModel:'',ocrOpenAiModel:'',ocrOllamaModel:'',ocrLmStudioModel:''},
-      settings: { provider:'openai', openAiBaseUrl:'https://api.openai.com/v1', openAiKey:'', openAiModel:'gpt-4o-mini', ollamaUrl:'http://localhost:11434/v1', ollamaModel:'', lmStudioUrl:'http://localhost:1234', lmStudioModel:'', ocrProvider:'none', ocrMode:'none', googleVisionKey:'', ocrOpenAiBaseUrl:'https://api.openai.com/v1', ocrOpenAiKey:'', ocrOpenAiModel:'', ocrOllamaUrl:'http://localhost:11434/v1', ocrOllamaModel:'', ocrLmStudioUrl:'http://localhost:1234', ocrLmStudioModel:'', maxTokens:2048, ollamaMaxTokens:8192, ocrMaxTokens:4096, ocrOllamaMaxTokens:8192, xmlPrompt:'', customDbPrompt:'', dynamicPrompt:'', ocrPrompt:'', customDbSchema: JSON.parse(JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA)), customJsonMapping:{}, pipelineSettings:{mode:'customdb'}, batchSettings:{inputDir:'',outputDir:'',mode:'customdb',keepInputFiles:false} },
+      settings: { provider:'openai', openAiBaseUrl:'https://api.openai.com/v1', openAiKey:'', openAiModel:'gpt-4o-mini', ollamaUrl:'http://localhost:11434/v1', ollamaModel:'', lmStudioUrl:'http://localhost:1234', lmStudioModel:'', ocrProvider:'none', ocrMode:'none', googleVisionKey:'', googleVisionTextMode:'full_text', ocrOpenAiBaseUrl:'https://api.openai.com/v1', ocrOpenAiKey:'', ocrOpenAiModel:'', ocrOllamaUrl:'http://localhost:11434/v1', ocrOllamaModel:'', ocrLmStudioUrl:'http://localhost:1234', ocrLmStudioModel:'', maxTokens:2048, ollamaMaxTokens:8192, ocrMaxTokens:4096, ocrOllamaMaxTokens:8192, xmlPrompt:'', customDbPrompt:'', dynamicPrompt:'', ocrPrompt:'', customDbSchema: JSON.parse(JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA)), customJsonMapping:{}, pipelineSettings:{mode:'customdb'}, batchSettings:{inputDir:'',outputDir:'',mode:'customdb',keepInputFiles:false} },
       schemaDraft: JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA, null, 2),
       mappingDraft: '{}',
       mappingModel:{},
@@ -490,6 +506,8 @@ const app = createApp({
       },
       dynamicText:'',
       rawOcrText:'',
+      rawOcrResponseText:'',
+      ocrPreviewOpen:{raw:false,parsed:false},
       dynamicFilterDuplicates: localStorage.getItem('dynamic_filter_duplicates') === '1',
       batchConfig:{inputDir:'',outputDir:'',mode:'customdb',keepInputFiles:false},
       batchStatus:{running:false,config:{},totals:{processed:0,failed:0},items:[],currentFile:'',lastError:'',plannedCount:0},
@@ -506,7 +524,7 @@ const app = createApp({
     xmlText: { get() { return JSON.stringify(this.xmlForm, null, 2); }, set(v) { try { this.xmlForm = JSON.parse(v || '{}'); } catch(e){} } },
     customDbText: { get() { return JSON.stringify(this.customDbForm, null, 2); }, set(v) { try { this.customDbForm = JSON.parse(v || '{}'); } catch(e){} } },
     dynamicOutputText() { return this.dynamicFilterDuplicates ? this.filterDuplicateLines(this.dynamicText) : this.dynamicText; },
-    hasOcrResult() { return typeof this.rawOcrText === 'string' && this.rawOcrText.trim().length > 0; },
+    hasOcrResult() { return (typeof this.rawOcrText === 'string' && this.rawOcrText.trim().length > 0) || (typeof this.rawOcrResponseText === 'string' && this.rawOcrResponseText.trim().length > 0); },
     batchProgressPercent() {
       const processed = Number(this.batchStatus?.totals?.processed || 0);
       const failed = Number(this.batchStatus?.totals?.failed || 0);
@@ -737,6 +755,7 @@ const app = createApp({
       this.settings.provider = this.normalizeProvider(this.settings.provider);
       this.settings.ocrProvider = this.normalizeOcrProvider(this.settings);
       this.settings.ocrMode = this.settings.ocrProvider;
+      if (!['full_text','paragraphs'].includes(this.settings.googleVisionTextMode)) this.settings.googleVisionTextMode = 'full_text';
       if (!this.settings.ollamaUrl) this.settings.ollamaUrl = 'http://localhost:11434/v1';
       if (!this.settings.ocrOllamaUrl) this.settings.ocrOllamaUrl = this.settings.ollamaUrl || 'http://localhost:11434/v1';
       if (!this.settings.ocrLmStudioUrl) this.settings.ocrLmStudioUrl = this.settings.lmStudioUrl || 'http://localhost:1234';
@@ -960,7 +979,7 @@ const app = createApp({
     startDrag(e) { this.isDragging=true; this.startX=e.clientX-this.panX; this.startY=e.clientY-this.panY; },
     onDrag(e) { if(this.isDragging){ this.panX=e.clientX-this.startX; this.panY=e.clientY-this.startY; } },
     endDrag() { this.isDragging=false; }, zoomIn() { this.zoomLevel=Math.min(5,this.zoomLevel+0.2); }, zoomOut() { this.zoomLevel=Math.max(0.5,this.zoomLevel-0.2); }, resetZoom() { this.zoomLevel=1; this.panX=0; this.panY=0; },
-    clearFile() { this.filePreview=null; this.fileObj=null; this.currentJob=null; this.rawOcrText=''; this.showOcrResultModal=false; this.resetZoom(); },
+    clearFile() { this.filePreview=null; this.fileObj=null; this.currentJob=null; this.rawOcrText=''; this.rawOcrResponseText=''; this.showOcrResultModal=false; this.ocrPreviewOpen={raw:false,parsed:false}; this.resetZoom(); },
     handleDrop(e) { this.processFile(e.dataTransfer.files[0]); },
     handleFileSelect(e) { this.processFile(e.target.files[0]); },
     async processFile(f) {
@@ -978,7 +997,7 @@ const app = createApp({
       if (this.activeTab === 'batch') return;
       if (!this.applyDraftSettings()) return;
       this.isProcessing = true; this.ocrStatus = this.t('submittingJob'); this.errorMsg = '';
-      this.rawOcrText = ''; this.showOcrResultModal = false;
+      this.rawOcrText = ''; this.rawOcrResponseText = ''; this.showOcrResultModal = false; this.ocrPreviewOpen={raw:false,parsed:false};
       try {
         const fd = new FormData();
         fd.append('file', this.fileObj);
@@ -1069,7 +1088,9 @@ const app = createApp({
     },
     loadJobResult(job) {
       this.rawOcrText = typeof job.raw_ocr_text === 'string' ? job.raw_ocr_text : '';
+      this.rawOcrResponseText = this.formatOcrResponse(job.raw_ocr_response);
       this.showOcrResultModal = false;
+      this.ocrPreviewOpen={raw:false,parsed:false};
       if (job.mode === 'customdb') {
         const parsed = this.coerceJsonObject(job.result) || this.coerceJsonObject(job.raw_response);
         if (!parsed) {
@@ -1086,6 +1107,32 @@ const app = createApp({
       else if (this.normalizeMode(job.mode) === 'xml') this.xmlForm = job.result || {};
       else if (typeof job.raw_response === 'string') this.dynamicText = job.raw_response;
       this.activeTab = this.normalizeMode(job.mode);
+    },
+    formatOcrResponse(value) {
+      if (value === undefined || value === null || value === '') return '';
+      if (typeof value === 'string') return value;
+      try { return JSON.stringify(value, null, 2); } catch(e) { return String(value); }
+    },
+    openOcrResultModal() {
+      this.ocrPreviewOpen = { raw:false, parsed:false };
+      this.showOcrResultModal = true;
+    },
+    async copyText(text) {
+      const value = String(text || '');
+      if (!value) return;
+      try {
+        await navigator.clipboard.writeText(value);
+      } catch(e) {
+        const area = document.createElement('textarea');
+        area.value = value;
+        area.setAttribute('readonly', '');
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand('copy');
+        document.body.removeChild(area);
+      }
     },
     coerceJsonObject(value) {
       if (this.isPlainObject(value)) return value;
