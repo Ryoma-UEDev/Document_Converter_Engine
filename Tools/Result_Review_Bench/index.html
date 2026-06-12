@@ -3,333 +3,376 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document Pair Editor</title>
+    <title>Result Review Bench</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
     <style>
         [v-cloak] { display: none; }
-        .viewer-container { cursor: grab; user-select: none; background-color: #f3f4f6; }
+        .viewer-container { cursor: grab; user-select: none; background: #f3f4f6; }
         .viewer-container:active { cursor: grabbing; }
         .viewer-container img, .viewer-container canvas { pointer-events: none; -webkit-user-drag: none; }
-        .invoice-input { background: transparent; border: none; border-bottom: 1px solid transparent; outline: none; transition: all 0.15s; }
-        .invoice-input:hover { border-bottom: 1px dashed #cbd5e1; background-color: #fefce8; }
-        .invoice-input:focus { border-bottom: 1px solid #3b82f6; background-color: #eff6ff; }
+        .invoice-input { background: transparent; border: 1px solid transparent; border-bottom-color: #d1d5db; outline: none; transition: all 0.12s; }
+        .invoice-input:hover { background: #fffbeb; border-color: #fde68a; }
+        .invoice-input:focus { background: #eff6ff; border-color: #3b82f6; }
+        .match-pass { background-color: rgba(34, 197, 94, 0.18) !important; border-color: #d1d5db !important; }
+        .match-fail { background-color: rgba(239, 68, 68, 0.20) !important; border-color: #d1d5db !important; }
+        .match-ignored { background-color: rgba(107, 114, 128, 0.10) !important; border-color: #d1d5db !important; color: #6b7280; }
     </style>
 </head>
-<body class="bg-gray-100 h-screen flex flex-col text-sm overflow-hidden font-sans">
-<div id="app" v-cloak class="flex flex-col h-full">
-
-    <!-- Header Section -->
-    <header class="bg-white border-b px-4 py-3 flex flex-wrap gap-4 items-center justify-between shadow-sm z-10">
-        <div class="flex items-center gap-4">
-            <h1 class="text-base font-bold text-gray-800 tracking-tight">Document Pair Editor</h1>
-            <div class="flex items-center gap-2">
-                <button @click="triggerManualOpen" class="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded text-xs font-semibold flex items-center gap-1">
-                    📁 Open Local File...
-                </button>
-                <input ref="manualFileInput" type="file" class="hidden" accept=".json,.pdf,.png,.jpg,.jpeg,.webp" @change="handleManualFile">
+<body class="bg-gray-100 h-screen flex flex-col overflow-hidden text-sm font-sans">
+<div id="app" v-cloak class="h-full flex flex-col">
+    <header class="bg-white border-b shadow-sm px-4 py-3 space-y-3">
+        <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <div>
+                <h1 class="text-lg font-bold text-gray-900">Result Review Bench</h1>
+                <p class="text-xs text-gray-500">Compare ground truth JSONs against multiple pipeline output folders.</p>
             </div>
+            <div class="flex rounded border overflow-hidden text-xs font-semibold">
+                <button @click="mainTab='review'" :class="mainTab==='review' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700'" class="px-4 py-2">Review</button>
+                <button @click="mainTab='report'" :class="mainTab==='report' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700'" class="px-4 py-2">Report</button>
+            </div>
+            <div></div>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2 text-xs flex-1 max-w-4xl justify-end">
-            <div class="flex items-center gap-1 border rounded bg-gray-50 px-2 py-1">
-                <span class="text-gray-500 font-bold uppercase text-[9px]">Input:</span>
-                <input v-model="inputDir" type="text" class="bg-transparent border-0 font-mono w-48 outline-none text-xs" placeholder="/path/to/inputs">
-                <button @click="openDirBrowser('input')" class="text-blue-600 hover:underline font-semibold">Browse</button>
-            </div>
-            <div class="flex items-center gap-1 border rounded bg-gray-50 px-2 py-1">
-                <span class="text-gray-500 font-bold uppercase text-[9px]">Output:</span>
-                <input v-model="outputDir" type="text" class="bg-transparent border-0 font-mono w-48 outline-none text-xs" placeholder="/path/to/outputs">
-                <button @click="openDirBrowser('output')" class="text-blue-600 hover:underline font-semibold">Browse</button>
-            </div>
-            <button @click="scanDirectories" class="px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white rounded font-bold transition-all">
-                Scan Folders
-            </button>
+        <div class="grid grid-cols-1 xl:grid-cols-[1fr_1fr_1fr_auto] gap-2 text-xs">
+            <label class="flex items-center gap-2 border rounded bg-gray-50 px-2 py-1">
+                <span class="text-gray-500 font-bold uppercase text-[9px] w-20">Input</span>
+                <input v-model="inputDir" class="flex-1 bg-transparent border-0 font-mono outline-none" placeholder="Folder with PDFs/images">
+                <button @click="pickFolder('input')" class="text-blue-700 font-semibold hover:underline">Browse</button>
+            </label>
+            <label class="flex items-center gap-2 border rounded bg-gray-50 px-2 py-1">
+                <span class="text-gray-500 font-bold uppercase text-[9px] w-20">Ground Truth</span>
+                <input v-model="gtDir" class="flex-1 bg-transparent border-0 font-mono outline-none" placeholder="Folder with GT JSONs">
+                <button @click="pickFolder('gt')" class="text-blue-700 font-semibold hover:underline">Browse</button>
+            </label>
+            <label class="flex items-center gap-2 border rounded bg-gray-50 px-2 py-1">
+                <span class="text-gray-500 font-bold uppercase text-[9px] w-20">Outputs</span>
+                <input v-model="outputsDir" class="flex-1 bg-transparent border-0 font-mono outline-none" placeholder="Folder containing pipeline folders">
+                <button @click="pickFolder('outputs')" class="text-blue-700 font-semibold hover:underline">Browse</button>
+            </label>
+            <button @click="scanBench" class="px-4 py-2 bg-gray-900 hover:bg-black text-white rounded font-bold">Scan Dataset</button>
         </div>
     </header>
 
-    <div class="flex-1 flex overflow-hidden relative">
+    <div v-if="statusMsg" :class="statusIsError ? 'bg-red-50 text-red-800 border-red-200' : 'bg-green-50 text-green-800 border-green-200'" class="border-b px-4 py-2 text-xs flex justify-between">
+        <span>{{ statusMsg }}</span>
+        <button @click="statusMsg=''">x</button>
+    </div>
 
-        <!-- Sidebar List: Collapsible -->
-        <aside :class="sidebarOpen ? 'w-80 border-r bg-white' : 'w-0'" class="transition-all duration-300 flex flex-col overflow-hidden relative h-full">
-            <div class="p-3 border-b bg-gray-50 flex items-center justify-between" v-if="sidebarOpen">
-                <span class="font-bold text-gray-700">Document Pairs ({{ pairs.length }})</span>
-                <button @click="sidebarOpen = false" class="text-gray-400 hover:text-gray-600 font-bold">◀ Hide</button>
+    <main v-if="mainTab==='report'" class="flex-1 overflow-auto p-4 space-y-4">
+        <section class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div class="bg-white border rounded p-4">
+                <div class="text-[10px] uppercase font-bold text-gray-400">Documents</div>
+                <div class="text-2xl font-bold">{{ documents.length }}</div>
             </div>
-            <div class="flex-1 overflow-y-auto divide-y" v-if="sidebarOpen">
-                <div v-if="!pairs.length" class="p-4 text-center text-gray-400 text-xs">No pairs loaded. Specify folders above and click "Scan Folders".</div>
-                <div v-for="pair in pairs" 
-                     :key="pair.name" 
-                     @click="selectPair(pair)"
-                     @dblclick="loadPairDetails(pair)"
-                     :class="['p-3 cursor-pointer transition-all border-l-4 text-xs', 
-                              selectedPair === pair ? 'bg-blue-50/50 border-blue-500' : 'border-transparent hover:bg-gray-50',
-                              activePair === pair ? 'bg-blue-50 border-blue-600 font-semibold' : '']">
-                    <div class="font-bold truncate text-gray-800">{{ pair.name }}</div>
-                    <div class="text-[10px] text-gray-500 truncate mt-0.5">📄 {{ getFileName(pair.input_path) }}</div>
-                    <div class="text-[10px] text-gray-500 truncate">⚙ {{ getFileName(pair.output_path) }}</div>
+            <div class="bg-white border rounded p-4">
+                <div class="text-[10px] uppercase font-bold text-gray-400">Pipelines</div>
+                <div class="text-2xl font-bold">{{ pipelines.length }}</div>
+            </div>
+            <div class="bg-white border rounded p-4">
+                <div class="text-[10px] uppercase font-bold text-gray-400">Rule Set</div>
+                <div class="text-sm font-semibold">{{ ruleSummary }}</div>
+                <button @click="openRulesModal" class="mt-2 px-3 py-1.5 bg-white border rounded hover:bg-gray-100 text-xs font-bold">Edit Rules</button>
+            </div>
+            <div class="bg-white border rounded p-4">
+                <div class="text-[10px] uppercase font-bold text-gray-400">Item Prefix</div>
+                <div class="flex items-center gap-2 mt-1">
+                    <input v-model.number="prefixLength" type="number" min="1" class="border rounded px-2 py-1 w-20">
+                    <span class="text-xs text-gray-500">characters</span>
                 </div>
+            </div>
+        </section>
+
+        <section class="bg-white border rounded">
+            <div class="px-4 py-3 border-b flex items-center justify-between">
+                <div>
+                    <h2 class="font-bold text-gray-900">{{ reportView === 'current' ? 'Pipeline Scores' : 'Report Comparison' }}</h2>
+                    <p class="text-xs text-gray-500">{{ reportView === 'current' ? 'Click a pipeline to expand document scores.' : 'Compare saved report JSON exports.' }}</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="flex border rounded overflow-hidden text-xs font-semibold">
+                        <button @click="reportView='current'" :class="reportView==='current' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700'" class="px-3 py-2">Current</button>
+                        <button @click="reportView='compare'" :class="reportView==='compare' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700'" class="px-3 py-2">Compare Reports</button>
+                    </div>
+                    <button @click="runReport" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold">Generate Report</button>
+                    <button @click="exportReport" :disabled="!report.length" class="px-4 py-2 bg-white border rounded hover:bg-gray-100 text-xs font-bold disabled:opacity-40">Export JSON</button>
+                    <button @click="$refs.reportImport.click()" class="px-4 py-2 bg-white border rounded hover:bg-gray-100 text-xs font-bold">Import Reports</button>
+                    <input ref="reportImport" type="file" accept=".json,application/json" multiple class="hidden" @change="importReports">
+                </div>
+            </div>
+
+            <div v-if="reportView==='compare'" class="p-4 space-y-3">
+                <div v-if="!comparisonReports.length" class="p-8 text-center text-gray-400 text-sm border rounded bg-gray-50">Import exported report JSON files to compare them.</div>
+                <div v-else class="overflow-auto border rounded">
+                    <table class="w-full text-xs bg-white">
+                        <thead class="bg-gray-100 text-gray-500 uppercase text-[10px]">
+                            <tr>
+                                <th class="text-left px-3 py-2 min-w-72">Pipeline</th>
+                                <th v-for="saved in comparisonReports" :key="saved.id" class="text-left px-3 py-2 min-w-44">
+                                    <div class="font-bold text-gray-700 normal-case truncate">{{ saved.name }}</div>
+                                    <div class="text-[9px] text-gray-400">Score / points / missing</div>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr v-for="pipelineName in comparisonPipelineNames" :key="pipelineName" class="hover:bg-gray-50">
+                                <td class="px-3 py-3 font-mono text-[11px] font-semibold text-gray-800">{{ pipelineName }}</td>
+                                <td v-for="saved in comparisonReports" :key="saved.id + pipelineName" class="px-3 py-3 border-l">
+                                    <div v-if="comparePipelineFor(saved, pipelineName)" class="space-y-1">
+                                        <div class="font-bold text-base" :class="comparePipelineFor(saved, pipelineName).score >= 90 ? 'text-green-700' : comparePipelineFor(saved, pipelineName).score >= 70 ? 'text-yellow-700' : 'text-red-700'">
+                                            {{ comparePipelineFor(saved, pipelineName).score }}%
+                                        </div>
+                                        <div class="text-[11px] text-gray-600">{{ comparePipelineFor(saved, pipelineName).passed }}/{{ comparePipelineFor(saved, pipelineName).total }} pts</div>
+                                        <div class="text-[11px]" :class="missingDocCount(comparePipelineFor(saved, pipelineName)) ? 'text-red-700' : 'text-gray-400'">
+                                            missing {{ missingDocCount(comparePipelineFor(saved, pipelineName)) }}
+                                        </div>
+                                    </div>
+                                    <div v-else class="text-gray-400 italic">Not in report</div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <button v-if="comparisonReports.length" @click="comparisonReports=[]" class="px-3 py-2 bg-white border rounded hover:bg-gray-100 text-xs font-bold">Clear Imported Reports</button>
+            </div>
+
+            <div v-if="reportView==='current' && !report.length" class="p-8 text-center text-gray-400 text-sm">Scan folders and generate a report.</div>
+            <template v-if="reportView==='current'">
+                <div v-for="pipe in report" :key="pipe.name" class="border-b last:border-b-0">
+                    <button @click="togglePipeline(pipe.name)" class="w-full px-4 py-3 flex items-center gap-4 hover:bg-gray-50 text-left">
+                        <span class="font-mono text-xs text-gray-400 w-4">{{ expandedPipelines[pipe.name] ? '-' : '+' }}</span>
+                        <span class="font-bold text-gray-900 flex-1 truncate">{{ pipe.name }}</span>
+                        <span class="w-48 bg-gray-200 rounded h-2 overflow-hidden">
+                            <span class="block h-full bg-blue-600" :style="{width: pipe.score + '%'}"></span>
+                        </span>
+                        <span class="font-bold w-16 text-right">{{ pipe.score }}%</span>
+                        <span class="text-xs text-gray-500 w-32 text-right">{{ pipe.passed }}/{{ pipe.total }} points</span>
+                    </button>
+                    <div v-if="expandedPipelines[pipe.name]" class="bg-gray-50 border-t">
+                        <div v-for="doc in pipe.documents" :key="doc.name" class="grid grid-cols-[1fr_120px_120px_130px] gap-3 items-center px-8 py-2 border-b last:border-b-0 text-xs">
+                            <div>
+                                <div class="font-semibold text-gray-800 truncate">{{ doc.name }}</div>
+                                <div v-if="doc.missing" class="text-red-700 text-[11px]">{{ doc.missing }}</div>
+                                <div v-if="!doc.missing && doc.warnings.length" class="text-yellow-700 text-[11px] truncate">{{ doc.warnings.join(', ') }}</div>
+                                <div v-if="!doc.missing && doc.failedFields.length" class="text-gray-500 text-[11px] truncate">{{ doc.failedFields.slice(0, 4).join(', ') }}</div>
+                            </div>
+                            <div class="bg-gray-200 rounded h-2 overflow-hidden">
+                                <div class="h-full" :class="doc.score >= 90 ? 'bg-green-600' : doc.score >= 70 ? 'bg-yellow-500' : 'bg-red-600'" :style="{width: doc.score + '%'}"></div>
+                            </div>
+                            <div class="font-bold text-right">{{ doc.score }}%</div>
+                            <button @click="openReview(doc.document, pipe.name)" class="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 font-semibold">Open Review</button>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </section>
+    </main>
+
+    <div v-if="showRulesModal" class="fixed inset-0 z-50 bg-black/45 flex items-center justify-center p-4">
+        <section class="bg-white border rounded shadow-xl w-full max-w-3xl max-h-[88vh] flex flex-col">
+            <div class="px-4 py-3 border-b flex items-center justify-between">
+                <div>
+                    <h2 class="font-bold text-gray-900">Grading Rules</h2>
+                    <p class="text-xs text-gray-500">Map each CustomDB field to the comparison mode used by the report.</p>
+                </div>
+                <button @click="showRulesModal=false" class="w-8 h-8 rounded border hover:bg-gray-100 text-lg leading-none">x</button>
+            </div>
+
+            <div class="p-4 border-b grid grid-cols-1 md:grid-cols-[1fr_180px] gap-3 text-xs">
+                <label class="flex items-center gap-2 border rounded bg-gray-50 px-3 py-2">
+                    <span class="font-bold text-gray-500 uppercase text-[10px]">Prefix Length</span>
+                    <input v-model.number="prefixLength" type="number" min="1" class="border rounded px-2 py-1 w-20 bg-white">
+                    <span class="text-gray-500">characters</span>
+                </label>
+                <button @click="resetRuleDraft" class="px-3 py-2 bg-white border rounded hover:bg-gray-100 font-bold">Reset Defaults</button>
+            </div>
+
+            <div class="flex-1 overflow-auto">
+                <table class="w-full text-xs">
+                    <thead class="sticky top-0 bg-gray-100 border-b text-gray-500 uppercase text-[10px]">
+                        <tr>
+                            <th class="text-left px-4 py-2 w-1/2">Schema Field</th>
+                            <th class="text-left px-4 py-2">Rule</th>
+                            <th class="text-left px-4 py-2 w-24">Wrong</th>
+                            <th class="text-left px-4 py-2 w-24">Missing</th>
+                            <th class="text-left px-4 py-2">Meaning</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr v-for="row in ruleDraft" :key="row.path" class="hover:bg-gray-50">
+                            <td class="px-4 py-2 font-mono text-gray-800">{{ row.path }}</td>
+                            <td class="px-4 py-2">
+                                <select v-model="row.rule" class="border rounded px-2 py-1 bg-white w-36">
+                                    <option v-for="option in ruleOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                                </select>
+                            </td>
+                            <td class="px-4 py-2">
+                                <input v-model.number="row.severity" type="number" min="1" max="5" class="border rounded px-2 py-1 bg-white w-16">
+                            </td>
+                            <td class="px-4 py-2">
+                                <input v-model.number="row.missingSeverity" type="number" min="1" max="5" class="border rounded px-2 py-1 bg-white w-16">
+                            </td>
+                            <td class="px-4 py-2 text-gray-500">{{ ruleDescription(row.rule) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="px-4 py-3 border-t flex justify-end gap-2">
+                <button @click="showRulesModal=false" class="px-4 py-2 bg-white border rounded hover:bg-gray-100 font-bold text-xs">Cancel</button>
+                <button @click="applyRuleDraft" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-xs">Apply Rules</button>
+            </div>
+        </section>
+    </div>
+
+    <main v-if="mainTab==='review'" class="flex-1 flex overflow-hidden">
+        <aside class="w-72 bg-white border-r flex flex-col">
+            <div class="p-3 border-b">
+                <div class="font-bold text-gray-800">Documents</div>
+                <div class="text-xs text-gray-500">{{ documents.length }} scanned</div>
+            </div>
+            <div class="flex-1 overflow-auto divide-y">
+                <button v-for="doc in documents" :key="doc.name" @click="openReview(doc, selectedPipelineName)" :class="activeDocument && activeDocument.name===doc.name ? 'bg-blue-50 border-blue-500' : 'border-transparent hover:bg-gray-50'" class="w-full text-left p-3 border-l-4">
+                    <div class="font-semibold text-xs truncate">{{ doc.name }}</div>
+                    <div class="text-[10px] text-gray-500 truncate">{{ getFileName(doc.input_path) }}</div>
+                </button>
             </div>
         </aside>
 
-        <!-- Sidebar toggle drawer when closed -->
-        <div v-if="!sidebarOpen" class="absolute left-0 top-0 bottom-0 w-8 bg-gray-800 flex items-center justify-center cursor-pointer z-20 hover:bg-gray-700 transition-colors" @click="sidebarOpen = true">
-            <span class="text-white font-bold text-xs transform -rotate-90 whitespace-nowrap tracking-widest uppercase">Show Pairs</span>
-        </div>
-
-        <!-- Main Workspace -->
-        <main class="flex-1 flex overflow-hidden pl-8 md:pl-0">
-
-            <!-- Workspace: Left half (Document Viewer) -->
-            <section class="w-1/2 flex flex-col border-r bg-gray-50 h-full">
-                <div class="p-2 border-b bg-white flex items-center justify-between text-xs">
-                    <span class="font-bold text-gray-700 truncate">Preview: {{ activeDocName || 'No document loaded' }}</span>
-                    <div class="flex items-center gap-1" v-if="docSrc">
-                        <button @click="zoomOut" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 border rounded font-bold">-</button>
-                        <button @click="resetZoom" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 border rounded text-[10px]">{{ Math.round(zoomLevel * 100) }}%</button>
-                        <button @click="zoomIn" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 border rounded font-bold">+</button>
-                    </div>
-                </div>
-                
-                <div class="flex-1 relative overflow-hidden viewer-container border-b flex items-center justify-center" 
-                     @wheel.prevent="handleWheel" 
-                     @mousedown.prevent="startDrag" 
-                     @mousemove.prevent="onDrag" 
-                     @mouseup="endDrag" 
-                     @mouseleave="endDrag">
-                    
-                    <div v-if="loadingDocument" class="absolute inset-0 bg-white/75 flex items-center justify-center z-10">
-                        <span class="text-xs text-gray-500 animate-pulse font-semibold">Loading Page View...</span>
-                    </div>
-
-                    <div v-if="!docSrc" class="text-center p-8 text-gray-400">
-                        <div class="text-4xl mb-2">📄</div>
-                        <p class="text-xs">No preview file active.</p>
-                        <p class="text-[10px] text-gray-500 mt-1">Double click a scanned pair or open a local document.</p>
-                    </div>
-
-                    <div v-show="docSrc" :style="{ transform: `translate(${panX}px, ${panY}px) scale(${zoomLevel})`, transition: isDragging ? 'none' : 'transform 0.1s' }">
-                        <canvas ref="pdfCanvas" v-show="isPdf" class="shadow-lg max-w-full max-h-full"></canvas>
-                        <img :src="docSrc" v-show="!isPdf" @load="resetZoom" class="shadow-lg max-w-full max-h-full object-contain" />
-                    </div>
-                </div>
-            </section>
-
-            <!-- Workspace: Right half (JSON Editor Panel) -->
-            <section class="w-1/2 flex flex-col bg-white h-full">
-                <div class="p-2 border-b bg-gray-50 flex items-center justify-between text-xs">
-                    <div class="flex border rounded overflow-hidden">
-                        <button @click="editMode = 'form'" :class="editMode === 'form' ? 'bg-gray-800 text-white' : 'bg-white text-gray-600'" class="px-3 py-1 font-semibold">Form Editor</button>
-                        <button @click="editMode = 'raw'" :class="editMode === 'raw' ? 'bg-gray-800 text-white' : 'bg-white text-gray-600'" class="px-3 py-1 font-semibold">Raw JSON</button>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <button @click="saveJson" :disabled="!isSaveable" class="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded font-bold disabled:opacity-50 flex items-center gap-1 shadow-sm transition-all text-xs">
-                            Save Changes
-                        </button>
-                    </div>
-                </div>
-
-                <div class="flex-1 overflow-y-auto bg-gray-200 p-4">
-                    <div v-if="statusMsg" :class="statusIsError ? 'bg-red-50 border-red-300 text-red-800' : 'bg-green-50 border-green-300 text-green-800'" class="mb-4 border p-3 rounded text-xs flex justify-between items-center">
-                        <span>{{ statusMsg }}</span>
-                        <button @click="statusMsg = ''" class="font-bold">x</button>
-                    </div>
-
-                    <!-- RAW JSON TEXTAREA -->
-                    <div v-if="editMode === 'raw'" class="h-full flex flex-col bg-white border rounded shadow-sm p-3">
-                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Structured Metadata Output</label>
-                        <textarea v-model="rawJsonText" class="w-full flex-1 border font-mono text-xs p-3 focus:outline-blue-500 rounded resize-none" placeholder="{}"></textarea>
-                    </div>
-
-                    <!-- FORM VISUAL PREVIEW AND CUSTOMDB FIELD SETUP -->
-                    <div v-if="editMode === 'form'" class="bg-white p-6 shadow-md border border-gray-300 w-full max-w-[900px] mx-auto text-black" style="font-family: Tahoma, sans-serif; font-size: 9pt;">
-                        <div class="text-lg font-bold text-gray-800 border-b-2 border-gray-800 pb-2 mb-4 tracking-widest uppercase">
-                            INVOICE METADATA
-                        </div>
-
-                        <!-- Buyer / Seller info -->
-                        <div class="grid grid-cols-2 gap-4 mb-6">
-                            <section>
-                                <b class="text-gray-500 text-[10px] uppercase tracking-wider block mb-1">Buyer (Client):</b>
-                                <input v-model="formFields.buyer.name" class="invoice-input w-full font-bold text-[10pt]" placeholder="Buyer Name" />
-                                <input v-model="formFields.buyer.address" class="invoice-input w-full mt-1" placeholder="Buyer Address" />
-                            </section>
-
-                            <section class="border-l border-gray-200 pl-4">
-                                <b class="text-rose-600 text-[10px] uppercase tracking-wider block mb-1">Seller (Vendor):</b>
-                                <input v-model="formFields.counterparty.name" class="invoice-input w-full font-bold text-[10pt]" placeholder="Seller Name" />
-                                <div class="flex flex-wrap items-center gap-1 mt-1">
-                                    <span class="text-gray-500 text-xs">Reg:</span>
-                                    <input v-model="formFields.counterparty.reg_num" class="invoice-input w-20 text-xs" />
-                                    <span class="text-gray-500 text-xs ml-2">VAT:</span>
-                                    <input v-model="formFields.counterparty.vat_num" class="invoice-input w-28 text-xs" />
-                                </div>
-                                <input v-model="formFields.counterparty.address" class="invoice-input w-full mt-1 text-xs" placeholder="Seller Address" />
-
-                                <div class="mt-1 flex items-center gap-1 text-xs">
-                                    <span class="text-gray-500 w-12">Bank 1:</span>
-                                    <input v-model="formFields.counterparty.bank" class="invoice-input w-20" placeholder="Bank" />
-                                    <input v-model="formFields.counterparty.iban" class="invoice-input flex-1 font-mono" placeholder="IBAN" />
-                                </div>
-                                <div class="mt-1 flex items-center gap-1 text-xs">
-                                    <span class="text-gray-500 w-12">Bank 2:</span>
-                                    <input v-model="formFields.counterparty.bank2" class="invoice-input w-20" placeholder="Bank 2" />
-                                    <input v-model="formFields.counterparty.iban2" class="invoice-input flex-1 font-mono" placeholder="IBAN 2" />
-                                </div>
-                            </section>
-                        </div>
-
-                        <!-- Invoice attributes -->
-                        <div class="grid grid-cols-[120px_1fr_120px_1fr] gap-x-3 gap-y-2 items-center mb-6 bg-gray-50 border border-gray-200 p-3">
-                            <label class="text-gray-500 text-xs text-right">Document #</label>
-                            <input v-model="formFields.doc_num" class="invoice-input font-bold w-full text-[10pt]" />
-                            <label class="text-gray-500 text-xs text-right">Reference #</label>
-                            <input v-model="formFields.ref_num" class="invoice-input font-bold w-full text-[10pt]" />
-                            <label class="text-gray-500 text-xs text-right">Document Date</label>
-                            <input v-model="formFields.doc_date" type="date" class="invoice-input font-bold w-full" />
-                            <label class="text-gray-500 text-xs text-right">Due Date</label>
-                            <input v-model="formFields.due_date" type="date" class="invoice-input font-bold w-full" />
-                        </div>
-
-                        <!-- Table Line Items -->
-                        <table width="100%" cellpadding="4" cellspacing="0" style="border: 1px solid black;" border="0" class="mb-2">
-                            <tr class="font-bold border-b border-black bg-gray-100 text-[8pt]">
-                                <td width="30%">Line Title</td>
-                                <td width="10%">Code</td>
-                                <td width="8%" align="center">Unit</td>
-                                <td width="8%" align="right">Qty</td>
-                                <td width="12%" align="right">Price</td>
-                                <td width="12%" align="right">Line Sum</td>
-                                <td width="12%" align="right" class="text-blue-700">VAT</td>
-                                <td width="12%" align="right" class="text-green-700">Total</td>
-                                <td width="4%"></td>
-                            </tr>
-                            <tr v-for="(itm, i) in formFields.items" :key="i" class="border-b border-gray-200 text-[8pt]">
-                                <td valign="top">
-                                    <input v-model="itm.title" class="invoice-input w-full font-bold mb-1" placeholder="Item name" />
-                                    <input v-model="itm.description" class="invoice-input w-full text-[7pt] italic text-gray-500" placeholder="Description/Specification" />
-                                </td>
-                                <td valign="top" class="pt-2"><input v-model="itm.code" class="invoice-input w-full font-mono text-[7pt]" /></td>
-                                <td valign="top" align="center" class="pt-2"><input v-model="itm.unit" class="invoice-input w-full text-center" /></td>
-                                <td valign="top" align="right" class="pt-2"><input v-model.number="itm.amount" type="number" step="0.001" @input="recalcItem(itm)" class="invoice-input w-full text-right" /></td>
-                                <td valign="top" align="right" class="pt-2"><input v-model.number="itm.item_price" type="number" step="0.01" @input="recalcItem(itm)" class="invoice-input w-full text-right" /></td>
-                                <td valign="top" align="right" class="pt-2"><input v-model.number="itm.item_sum" type="number" step="0.01" class="invoice-input w-full text-right font-bold" /></td>
-                                <td valign="top" align="right" class="pt-2"><input v-model.number="itm.vat_sum" type="number" step="0.01" class="invoice-input w-full text-right text-blue-700" /></td>
-                                <td valign="top" align="right" class="pt-2"><input v-model.number="itm.total_sum" type="number" step="0.01" class="invoice-input w-full text-right text-green-700 font-bold" /></td>
-                                <td valign="top" align="center" class="pt-2">
-                                    <button @click="removeLineItem(i)" class="text-red-500 hover:text-red-700 font-bold">x</button>
-                                </td>
-                            </tr>
-                        </table>
-
-                        <button @click="addLineItem" class="text-blue-600 text-xs font-bold mb-6 hover:underline">+ Add Line Item</button>
-
-                        <!-- Totals Block -->
-                        <div class="grid grid-cols-2 gap-4">
-                            <section class="border-r border-gray-200 pr-4">
-                                <label class="block text-[8pt] text-gray-500 mb-1">Invoice Remarks/Details:</label>
-                                <textarea v-model="formFields.description" class="invoice-input w-full font-bold h-16 border rounded p-1 text-[8pt]" placeholder="Additional terms..."></textarea>
-                                
-                                <label class="block text-[8pt] text-gray-500 mb-1 mt-2">Active Source File Path:</label>
-                                <input v-model="formFields.src_path" class="invoice-input w-full text-gray-500 font-mono text-[7pt] bg-gray-50 p-1" readonly />
-                            </section>
-
-                            <section class="grid grid-cols-[1fr_120px] gap-x-2 gap-y-2 items-end">
-                                <label class="text-right text-gray-600 text-[8pt]">Net items Sum:</label>
-                                <input v-model.number="formFields.items_sum" type="number" step="0.01" class="invoice-input w-full text-right font-bold" />
-                                
-                                <label class="text-right text-gray-600 text-[8pt]">VAT rate % / Sum:</label>
-                                <div class="flex items-center gap-1 justify-end">
-                                    <input v-model.number="formFields.vat_rate" type="number" class="invoice-input w-8 text-center" />%
-                                </div>
-                                <input v-model.number="formFields.vat_sum" type="number" step="0.01" class="invoice-input w-full text-right font-bold" />
-                                
-                                <label class="text-right text-gray-600 text-[8pt]">Round Adjust:</label>
-                                <input v-model.number="formFields.round_sum" type="number" step="0.01" class="invoice-input w-full text-right" />
-                                
-                                <label class="text-right text-[9pt] text-rose-800 pt-2 font-bold">Total Amount EUR:</label>
-                                <input v-model.number="formFields.total_sum" type="number" step="0.01" class="invoice-input w-full text-right text-[12pt] text-rose-700 font-bold" />
-                            </section>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </main>
-    </div>
-
-    <!-- Directory Browser Dialog Modal -->
-    <div v-if="false && showDirBrowserModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-            <div class="p-4 border-b flex justify-between items-center">
-                <h3 class="font-bold text-base">Select Folder Directory</h3>
-                <button @click="showDirBrowserModal = false" class="text-gray-400 hover:text-gray-700 font-bold">X</button>
-            </div>
-            <div class="p-3 border-b bg-gray-50">
-                <div class="text-[10px] uppercase font-bold text-gray-400">Target Path</div>
-                <div class="font-mono text-xs break-all text-gray-700 select-all">{{ dbBrowse.path }}</div>
-                <div class="mt-2 flex gap-2">
-                    <button v-if="dbBrowse.parent" @click="loadDir(dbBrowse.parent)" class="px-3 py-1 bg-white border rounded text-xs hover:bg-gray-50 font-semibold">⬆ Parent Dir</button>
-                    <button @click="useCurrentDir" class="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-bold">Select This Directory</button>
+        <section class="w-1/2 flex flex-col border-r bg-gray-50">
+            <div class="p-2 bg-white border-b flex items-center justify-between text-xs">
+                <span class="font-bold truncate">Preview: {{ activeDocName || 'No document loaded' }}</span>
+                <div v-if="docSrc" class="flex items-center gap-1">
+                    <button @click="zoomOut" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 border rounded font-bold">-</button>
+                    <button @click="resetZoom" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 border rounded text-[10px]">{{ Math.round(zoomLevel * 100) }}%</button>
+                    <button @click="zoomIn" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 border rounded font-bold">+</button>
                 </div>
             </div>
-            <div class="flex-1 overflow-y-auto p-4 divide-y">
-                <div v-if="dbBrowse.error" class="p-3 text-red-800 bg-red-50 text-xs rounded mb-2">{{ dbBrowse.error }}</div>
-                <div v-if="!dbBrowse.directories.length" class="p-4 text-center text-xs text-gray-400">No sub-directories inside.</div>
-                <div v-for="dir in dbBrowse.directories" :key="dir" @click="loadDirJoin(dir)" class="py-2.5 px-2 hover:bg-gray-50 cursor-pointer text-xs font-mono text-gray-800">
-                    📁 {{ dir }}
+            <div class="flex-1 relative overflow-hidden viewer-container flex items-center justify-center"
+                 @wheel.prevent="handleWheel"
+                 @mousedown.prevent="startDrag"
+                 @mousemove.prevent="onDrag"
+                 @mouseup="endDrag"
+                 @mouseleave="endDrag">
+                <div v-if="loadingDocument" class="absolute inset-0 bg-white/75 flex items-center justify-center z-10 text-xs text-gray-500 font-semibold">Loading...</div>
+                <div v-if="!docSrc" class="text-center text-gray-400 text-xs">No document loaded.</div>
+                <div v-show="docSrc" :style="{ transform: `translate(${panX}px, ${panY}px) scale(${zoomLevel})`, transition: isDragging ? 'none' : 'transform 0.1s' }">
+                    <canvas ref="pdfCanvas" v-show="isPdf" class="shadow-lg max-w-full max-h-full"></canvas>
+                    <img :src="docSrc" v-show="!isPdf" @load="resetZoom" class="shadow-lg max-w-full max-h-full object-contain">
                 </div>
             </div>
-            <div class="p-3 bg-gray-50 border-t flex justify-end">
-                <button @click="showDirBrowserModal = false" class="px-4 py-2 border rounded bg-white hover:bg-gray-50 text-xs">Cancel</button>
-            </div>
-        </div>
-    </div>
+        </section>
 
-    <!-- Improved fallback directory browser. Native OS picker is still tried first. -->
-    <div v-if="showDirBrowserModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div class="bg-white rounded shadow-xl w-full max-w-4xl h-[80vh] flex flex-col">
-            <div class="p-4 border-b flex justify-between items-center bg-gray-900 text-white">
-                <div>
-                    <h3 class="font-bold text-base">Select Folder</h3>
-                    <p class="text-[11px] text-gray-300 mt-0.5">Native picker was unavailable, so this browser is using the local Python server.</p>
+        <section class="flex-1 flex flex-col bg-white min-w-0">
+            <div class="p-2 border-b bg-gray-50 space-y-2">
+                <div class="text-xs">
+                    <select v-model="selectedPipelineName" @change="activeDocument && openReview(activeDocument, selectedPipelineName)" class="border rounded px-2 py-1 min-w-0">
+                        <option v-for="pipe in pipelines" :key="pipe.name" :value="pipe.name">{{ pipe.name }}</option>
+                    </select>
                 </div>
-                <button @click="showDirBrowserModal = false" class="text-gray-300 hover:text-white font-bold text-lg">X</button>
-            </div>
-            <div class="p-3 border-b bg-gray-50 space-y-3">
-                <form @submit.prevent="loadDir(dbPathInput)" class="flex gap-2">
-                    <input v-model="dbPathInput" class="flex-1 border rounded px-3 py-2 font-mono text-xs outline-blue-500 bg-white" placeholder="Type or paste a folder path">
-                    <button type="submit" class="px-4 py-2 bg-gray-800 text-white rounded text-xs font-bold hover:bg-gray-900">Go</button>
-                    <button type="button" @click="useCurrentDir" class="px-4 py-2 bg-blue-600 text-white rounded text-xs font-bold hover:bg-blue-700">Select</button>
-                </form>
-                <div class="flex flex-wrap gap-2 items-center">
-                    <button v-if="dbBrowse.parent" @click="loadDir(dbBrowse.parent)" class="px-3 py-1.5 bg-white border rounded text-xs hover:bg-gray-100 font-semibold">Up</button>
-                    <button @click="loadDir(dbBrowse.home)" class="px-3 py-1.5 bg-white border rounded text-xs hover:bg-gray-100 font-semibold">Home</button>
-                    <button @click="loadDir(dbBrowse.cwd)" class="px-3 py-1.5 bg-white border rounded text-xs hover:bg-gray-100 font-semibold">Tool Folder</button>
-                    <button @click="loadDir(dbBrowse.path)" class="px-3 py-1.5 bg-white border rounded text-xs hover:bg-gray-100 font-semibold">Refresh</button>
-                    <div class="h-5 border-l mx-1"></div>
-                    <button v-for="root in dbBrowse.roots" :key="root" @click="loadDir(root)" class="px-3 py-1.5 bg-white border rounded text-xs hover:bg-gray-100 font-mono font-semibold">
-                        {{ root }}
-                    </button>
+                <div class="flex items-center gap-2 text-xs flex-wrap">
+                    <button @click="rightJsonTab='gt'" :class="rightJsonTab==='gt' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700'" class="px-3 py-1 border rounded font-semibold">Ground Truth</button>
+                    <button @click="rightJsonTab='output'" :class="rightJsonTab==='output' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700'" class="px-3 py-1 border rounded font-semibold">Pipeline Output</button>
+                    <button @click="rightViewMode='form'" :class="rightViewMode==='form' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'" class="px-3 py-1 border rounded font-semibold">Form</button>
+                    <button @click="rightViewMode='raw'" :class="rightViewMode==='raw' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'" class="px-3 py-1 border rounded font-semibold">Raw</button>
+                    <button @click="saveActiveJson" :disabled="!activeOutputPath" class="px-4 py-1 bg-green-600 text-white rounded font-bold disabled:opacity-40">Save</button>
                 </div>
+                <div class="text-[11px] text-gray-500 font-mono truncate">{{ activeOutputPath || 'No JSON selected' }}</div>
             </div>
-            <div class="flex-1 overflow-y-auto p-3 bg-white">
-                <div v-if="dbBrowse.error" class="p-3 text-red-800 bg-red-50 text-xs rounded mb-2">{{ dbBrowse.error }}</div>
-                <div v-if="!dbBrowse.directories.length" class="p-4 text-center text-xs text-gray-400">No sub-directories inside.</div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
-                    <button v-for="dir in dbBrowse.directories" :key="dir" @click="loadDirJoin(dir)" class="text-left px-3 py-2 hover:bg-blue-50 rounded border border-transparent hover:border-blue-100 text-xs font-mono text-gray-800 truncate">
-                        [dir] {{ dir }}
-                    </button>
-                </div>
-            </div>
-            <div class="p-3 bg-gray-50 border-t flex items-center justify-between">
-                <div class="font-mono text-[11px] text-gray-500 truncate pr-4">{{ dbBrowse.path }}</div>
-                <button @click="showDirBrowserModal = false" class="px-4 py-2 border rounded bg-white hover:bg-gray-50 text-xs">Cancel</button>
-            </div>
-        </div>
-    </div>
 
+            <div class="flex-1 overflow-auto bg-gray-200 p-4">
+                <div v-if="rightViewMode==='raw'" class="h-full bg-white border rounded p-3">
+                    <textarea v-model="rawJsonText" class="w-full h-full resize-none font-mono text-xs border rounded p-3 outline-blue-500"></textarea>
+                </div>
+                <div v-else class="bg-white p-6 shadow border border-gray-300 w-full max-w-[900px] mx-auto text-black" style="font-family: Tahoma, sans-serif; font-size: 9pt;">
+                    <div class="text-lg font-bold border-b-2 border-gray-900 pb-2 mb-4 tracking-widest uppercase">
+                        {{ rightJsonTab === 'gt' ? 'Ground Truth' : selectedPipelineName }}
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 mb-6">
+                        <section>
+                            <b class="text-gray-500 text-[10px] uppercase block mb-1">Buyer</b>
+                            <input v-model="formFields.buyer.name" :class="fieldClass('buyer.name')" class="invoice-input w-full font-bold text-[10pt]" placeholder="Buyer Name">
+                            <input v-model="formFields.buyer.address" :class="fieldClass('buyer.address')" class="invoice-input w-full mt-1" placeholder="Buyer Address">
+                        </section>
+                        <section class="border-l border-gray-200 pl-4">
+                            <b class="text-rose-600 text-[10px] uppercase block mb-1">Seller</b>
+                            <input v-model="formFields.counterparty.name" :class="fieldClass('counterparty.name')" class="invoice-input w-full font-bold text-[10pt]" placeholder="Seller Name">
+                            <div class="flex flex-wrap items-center gap-1 mt-1">
+                                <span class="text-gray-500 text-xs">Reg:</span>
+                                <input v-model="formFields.counterparty.reg_num" :class="fieldClass('counterparty.reg_num')" class="invoice-input w-24 text-xs">
+                                <span class="text-gray-500 text-xs ml-2">VAT:</span>
+                                <input v-model="formFields.counterparty.vat_num" :class="fieldClass('counterparty.vat_num')" class="invoice-input w-32 text-xs">
+                            </div>
+                            <input v-model="formFields.counterparty.address" :class="fieldClass('counterparty.address')" class="invoice-input w-full mt-1 text-xs" placeholder="Seller Address">
+                        </section>
+                    </div>
+
+                    <div class="grid grid-cols-[120px_1fr_120px_1fr] gap-x-3 gap-y-2 items-center mb-6 bg-gray-50 border border-gray-200 p-3">
+                        <label class="text-gray-500 text-xs text-right">Document #</label>
+                        <input v-model="formFields.doc_num" :class="fieldClass('doc_num')" class="invoice-input font-bold w-full text-[10pt]">
+                        <label class="text-gray-500 text-xs text-right">Reference #</label>
+                        <input v-model="formFields.ref_num" :class="fieldClass('ref_num')" class="invoice-input font-bold w-full text-[10pt]">
+                        <label class="text-gray-500 text-xs text-right">Document Date</label>
+                        <input v-model="formFields.doc_date" :class="fieldClass('doc_date')" type="date" class="invoice-input font-bold w-full">
+                        <label class="text-gray-500 text-xs text-right">Due Date</label>
+                        <input v-model="formFields.due_date" :class="fieldClass('due_date')" type="date" class="invoice-input font-bold w-full">
+                    </div>
+
+                    <table width="100%" cellpadding="4" cellspacing="0" style="border: 1px solid black;" class="mb-2">
+                        <tr class="font-bold border-b border-black bg-gray-100 text-[8pt]">
+                            <td width="30%">Line Title</td>
+                            <td width="10%">Code</td>
+                            <td width="8%" align="center">Unit</td>
+                            <td width="8%" align="right">Qty</td>
+                            <td width="12%" align="right">Price</td>
+                            <td width="12%" align="right">Line Sum</td>
+                            <td width="12%" align="right">VAT</td>
+                            <td width="12%" align="right">Total</td>
+                            <td width="4%"></td>
+                        </tr>
+                        <tr v-for="(itm, i) in formFields.items" :key="i" class="border-b border-gray-200 text-[8pt]">
+                            <td valign="top">
+                                <input v-model="itm.title" :class="fieldClass(`items[${i}].title`)" class="invoice-input w-full font-bold mb-1" placeholder="Item name">
+                                <input v-model="itm.description" :class="fieldClass(`items[${i}].description`)" class="invoice-input w-full text-[7pt] italic" placeholder="Description">
+                            </td>
+                            <td valign="top" class="pt-2"><input v-model="itm.code" :class="fieldClass(`items[${i}].code`)" class="invoice-input w-full font-mono text-[7pt]"></td>
+                            <td valign="top" align="center" class="pt-2"><input v-model="itm.unit" :class="fieldClass(`items[${i}].unit`)" class="invoice-input w-full text-center"></td>
+                            <td valign="top" align="right" class="pt-2"><input v-model.number="itm.amount" :class="fieldClass(`items[${i}].amount`)" type="number" step="0.001" class="invoice-input w-full text-right"></td>
+                            <td valign="top" align="right" class="pt-2"><input v-model.number="itm.item_price" :class="fieldClass(`items[${i}].item_price`)" type="number" step="0.001" class="invoice-input w-full text-right"></td>
+                            <td valign="top" align="right" class="pt-2"><input v-model.number="itm.item_sum" :class="fieldClass(`items[${i}].item_sum`)" type="number" step="0.01" class="invoice-input w-full text-right font-bold"></td>
+                            <td valign="top" align="right" class="pt-2"><input v-model.number="itm.vat_sum" :class="fieldClass(`items[${i}].vat_sum`)" type="number" step="0.01" class="invoice-input w-full text-right"></td>
+                            <td valign="top" align="right" class="pt-2"><input v-model.number="itm.total_sum" :class="fieldClass(`items[${i}].total_sum`)" type="number" step="0.01" class="invoice-input w-full text-right font-bold"></td>
+                            <td valign="top" align="center" class="pt-2"><button @click="removeLineItem(i)" class="text-red-500 font-bold">x</button></td>
+                        </tr>
+                    </table>
+                    <button @click="addLineItem" class="text-blue-600 text-xs font-bold mb-6 hover:underline">+ Add Line Item</button>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <section class="border-r border-gray-200 pr-4">
+                            <label class="block text-[8pt] text-gray-500 mb-1">Document Description</label>
+                            <textarea v-model="formFields.description" :class="fieldClass('description')" class="invoice-input w-full h-16 border rounded p-1 text-[8pt]"></textarea>
+                            <label class="block text-[8pt] text-gray-500 mb-1 mt-2">Source File</label>
+                            <input v-model="formFields.src_path" :class="fieldClass('src_path')" class="invoice-input w-full text-gray-500 font-mono text-[7pt] bg-gray-50 p-1">
+                        </section>
+                        <section class="grid grid-cols-[1fr_120px] gap-x-2 gap-y-2 items-end">
+                            <label class="text-right text-gray-600 text-[8pt]">Net items Sum:</label>
+                            <input v-model.number="formFields.items_sum" :class="fieldClass('items_sum')" type="number" step="0.01" class="invoice-input w-full text-right font-bold">
+                            <label class="text-right text-gray-600 text-[8pt]">VAT rate:</label>
+                            <input v-model.number="formFields.vat_rate" :class="fieldClass('vat_rate')" type="number" class="invoice-input w-full text-right">
+                            <label class="text-right text-gray-600 text-[8pt]">VAT Sum:</label>
+                            <input v-model.number="formFields.vat_sum" :class="fieldClass('vat_sum')" type="number" step="0.01" class="invoice-input w-full text-right font-bold">
+                            <label class="text-right text-gray-600 text-[8pt]">Round Adjust:</label>
+                            <input v-model.number="formFields.round_sum" :class="fieldClass('round_sum')" type="number" step="0.01" class="invoice-input w-full text-right">
+                            <label class="text-right text-[9pt] text-rose-800 pt-2 font-bold">Total Amount EUR:</label>
+                            <input v-model.number="formFields.total_sum" :class="fieldClass('total_sum')" type="number" step="0.01" class="invoice-input w-full text-right text-[12pt] text-rose-700 font-bold">
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
 </div>
 
 <script>
@@ -339,44 +382,166 @@ const DEFAULT_FORM_FIELDS = {
     doc_num: '', doc_date: '', due_date: '', ref_num: '', description: '', src_path: '',
     vat_rate: 0, items_sum: 0, vat_sum: 0, total_sum: 0, round_sum: 0,
     buyer: { name: '', address: '' },
-    counterparty: { name: '', reg_num: '', vat_num: '', address: '', bank: '', iban: '', bank2: '', iban2: '' },
+    counterparty: { name: '', reg_num: '', vat_num: '', address: '' },
     items: []
 };
+
+const BASE_FIELDS = [
+    'doc_num', 'doc_date', 'due_date', 'ref_num',
+    'vat_rate', 'items_sum', 'vat_sum', 'total_sum', 'round_sum',
+    'buyer.name', 'buyer.address',
+    'counterparty.name', 'counterparty.reg_num', 'counterparty.vat_num', 'counterparty.address',
+    'description', 'src_path'
+];
+const ITEM_FIELDS = ['title', 'description', 'code', 'amount', 'unit', 'item_price', 'item_sum', 'vat_sum', 'total_sum'];
+const RULE_FIELDS = [...BASE_FIELDS, 'items.__count__', ...ITEM_FIELDS.map(field => `items[].${field}`)];
+const RULE_OPTIONS = [
+    { value: 'exact', label: 'Exact' },
+    { value: 'normalized', label: 'Normalized' },
+    { value: 'prefix', label: 'Prefix' },
+    { value: 'ignored', label: 'Ignored' }
+];
+const DEFAULT_FIELD_RULES = {
+    'buyer.name': 'normalized',
+    'buyer.address': 'normalized',
+    'counterparty.name': 'normalized',
+    'counterparty.address': 'normalized',
+    'description': 'ignored',
+    'src_path': 'ignored',
+    'items[].title': 'prefix',
+    'items[].description': 'ignored'
+};
+const DEFAULT_FIELD_SEVERITIES = {
+    'doc_num': 5,
+    'doc_date': 4,
+    'due_date': 4,
+    'ref_num': 2,
+    'vat_rate': 3,
+    'items_sum': 4,
+    'vat_sum': 4,
+    'total_sum': 5,
+    'round_sum': 2,
+    'buyer.name': 4,
+    'buyer.address': 2,
+    'counterparty.name': 4,
+    'counterparty.reg_num': 3,
+    'counterparty.vat_num': 3,
+    'counterparty.address': 2,
+    'description': 1,
+    'src_path': 1,
+    'items.__count__': 2,
+    'items[].title': 4,
+    'items[].description': 1,
+    'items[].code': 2,
+    'items[].amount': 5,
+    'items[].unit': 3,
+    'items[].item_price': 5,
+    'items[].item_sum': 5,
+    'items[].vat_sum': 4,
+    'items[].total_sum': 5
+};
+const DEFAULT_MISSING_SEVERITIES = Object.fromEntries(
+    Object.entries(DEFAULT_FIELD_SEVERITIES).map(([path, severity]) => [path, Math.min(5, severity + 1)])
+);
+
+function cloneDefault() {
+    return JSON.parse(JSON.stringify(DEFAULT_FORM_FIELDS));
+}
+
+function cloneDefaultRules() {
+    const rules = {};
+    RULE_FIELDS.forEach(path => {
+        rules[path] = DEFAULT_FIELD_RULES[path] || 'exact';
+    });
+    return rules;
+}
+
+function cloneDefaultSeverities() {
+    const severities = {};
+    RULE_FIELDS.forEach(path => {
+        severities[path] = DEFAULT_FIELD_SEVERITIES[path] || 1;
+    });
+    return severities;
+}
+
+function cloneDefaultMissingSeverities() {
+    const severities = {};
+    RULE_FIELDS.forEach(path => {
+        severities[path] = DEFAULT_MISSING_SEVERITIES[path] || 2;
+    });
+    return severities;
+}
+
+function loadStoredRules() {
+    try {
+        const saved = JSON.parse(localStorage.getItem('rrb_field_rules') || '{}');
+        return { ...cloneDefaultRules(), ...(saved || {}) };
+    } catch (e) {
+        return cloneDefaultRules();
+    }
+}
+
+function loadStoredSeverities() {
+    try {
+        const saved = JSON.parse(localStorage.getItem('rrb_field_severities') || '{}');
+        return { ...cloneDefaultSeverities(), ...(saved || {}) };
+    } catch (e) {
+        return cloneDefaultSeverities();
+    }
+}
+
+function loadStoredMissingSeverities() {
+    try {
+        const saved = JSON.parse(localStorage.getItem('rrb_missing_severities') || '{}');
+        return { ...cloneDefaultMissingSeverities(), ...(saved || {}) };
+    } catch (e) {
+        return cloneDefaultMissingSeverities();
+    }
+}
 
 createApp({
     data() {
         return {
-            inputDir: localStorage.getItem('pair_input_dir') || '',
-            outputDir: localStorage.getItem('pair_output_dir') || '',
-            pairs: [],
-            sidebarOpen: true,
-            selectedPair: null,
-            activePair: null,
-            
-            // Visual preview states
+            mainTab: 'report',
+            inputDir: localStorage.getItem('rrb_input_dir') || '',
+            gtDir: localStorage.getItem('rrb_gt_dir') || '',
+            outputsDir: localStorage.getItem('rrb_outputs_dir') || '',
+            documents: [],
+            pipelines: [],
+            report: [],
+            reportView: 'current',
+            comparisonReports: [],
+            expandedPipelines: {},
+            jsonCache: {},
+            prefixLength: Number(localStorage.getItem('rrb_prefix_length') || 10),
+            fieldRules: loadStoredRules(),
+            fieldSeverities: loadStoredSeverities(),
+            missingSeverities: loadStoredMissingSeverities(),
+            ruleDraft: [],
+            showRulesModal: false,
+            ruleOptions: RULE_OPTIONS,
+
+            activeDocument: null,
+            selectedPipelineName: '',
+            rightJsonTab: 'gt',
+            rightViewMode: 'form',
+            gtJson: cloneDefault(),
+            outputJson: cloneDefault(),
+            formFields: cloneDefault(),
+            activeOutputPath: '',
+            fieldStatuses: {},
+
             activeDocName: '',
             docSrc: '',
             isPdf: false,
             loadingDocument: false,
-            zoomLevel: 1.0,
+            zoomLevel: 1,
             panX: 0,
             panY: 0,
             isDragging: false,
             startX: 0,
             startY: 0,
 
-            // Text/Metadata visual editor fields
-            editMode: 'form',
-            formFields: JSON.parse(JSON.stringify(DEFAULT_FORM_FIELDS)),
-            activeOutputPath: '',
-
-            // Directory Browser states
-            showDirBrowserModal: false,
-            dirBrowserTarget: '', // 'input' or 'output'
-            dbBrowse: { path: '', parent: '', directories: [], error: '', home: '', cwd: '', roots: [], separator: '/' },
-            dbPathInput: '',
-
-            // Feedback logs
             statusMsg: '',
             statusIsError: false
         };
@@ -386,80 +551,188 @@ createApp({
             get() {
                 return JSON.stringify(this.formFields, null, 2);
             },
-            set(val) {
+            set(value) {
                 try {
-                    this.formFields = JSON.parse(val);
+                    this.formFields = this.sanitizeForm(JSON.parse(value));
+                    this.syncActiveJson();
                     this.statusMsg = '';
                 } catch (e) {
-                    this.statusMsg = "Syntax Exception: Text contains invalid JSON markup.";
-                    this.statusIsError = true;
+                    this.showStatus('Invalid JSON syntax.', true);
                 }
             }
         },
-        isSaveable() {
-            return this.activeOutputPath !== '';
+        ruleSummary() {
+            const counts = this.ruleOptions.reduce((acc, option) => ({ ...acc, [option.value]: 0 }), {});
+            Object.values(this.fieldRules).forEach(rule => { counts[rule] = (counts[rule] || 0) + 1; });
+            return this.ruleOptions
+                .filter(option => counts[option.value])
+                .map(option => `${option.label.toLowerCase()} ${counts[option.value]}`)
+                .join(' / ');
+        },
+        comparisonPipelineNames() {
+            const names = new Set();
+            this.comparisonReports.forEach(saved => {
+                (saved.report || []).forEach(pipe => names.add(pipe.name));
+            });
+            return Array.from(names).sort((a, b) => a.localeCompare(b));
         }
     },
-    mounted() {
-        if (this.inputDir && this.outputDir) {
-            this.scanDirectories();
+    watch: {
+        rightJsonTab() {
+            this.formFields = this.sanitizeForm(this.rightJsonTab === 'gt' ? this.gtJson : this.outputJson);
+            this.activeOutputPath = this.rightJsonTab === 'gt' ? (this.activeDocument?.gt_path || '') : (this.activeDocument?.outputs?.[this.selectedPipelineName] || '');
+            this.refreshFieldStatuses();
+        },
+        prefixLength() {
+            localStorage.setItem('rrb_prefix_length', String(this.prefixLength || 10));
+            this.refreshFieldStatuses();
+            if (this.report.length) this.runReport(false);
         }
     },
     methods: {
         getFileName(path) {
-            if (!path) return '';
-            return path.split(/[/\\]/).pop();
+            return path ? path.split(/[/\\]/).pop() : '';
         },
-        // API Calls & Directory Management
-        async scanDirectories() {
-            if (!this.inputDir || !this.outputDir) {
-                this.showStatus("Please supply paths for both source directories.", true);
+        showStatus(message, isError = false) {
+            this.statusMsg = message;
+            this.statusIsError = isError;
+            if (!isError) setTimeout(() => { if (this.statusMsg === message) this.statusMsg = ''; }, 3500);
+        },
+        openRulesModal() {
+            this.ruleDraft = RULE_FIELDS.map(path => ({
+                path,
+                rule: this.fieldRules[path] || 'exact',
+                severity: this.fieldSeverities[path] || 1,
+                missingSeverity: this.missingSeverities[path] || 2
+            }));
+            this.showRulesModal = true;
+        },
+        resetRuleDraft() {
+            const defaults = cloneDefaultRules();
+            const severities = cloneDefaultSeverities();
+            const missingSeverities = cloneDefaultMissingSeverities();
+            this.ruleDraft = RULE_FIELDS.map(path => ({
+                path,
+                rule: defaults[path],
+                severity: severities[path],
+                missingSeverity: missingSeverities[path]
+            }));
+        },
+        applyRuleDraft() {
+            const nextRules = cloneDefaultRules();
+            const nextSeverities = cloneDefaultSeverities();
+            const nextMissingSeverities = cloneDefaultMissingSeverities();
+            this.ruleDraft.forEach(row => {
+                nextRules[row.path] = row.rule || 'exact';
+                nextSeverities[row.path] = Math.max(1, Math.min(5, Number(row.severity) || 1));
+                nextMissingSeverities[row.path] = Math.max(1, Math.min(5, Number(row.missingSeverity) || 2));
+            });
+            this.fieldRules = nextRules;
+            this.fieldSeverities = nextSeverities;
+            this.missingSeverities = nextMissingSeverities;
+            localStorage.setItem('rrb_field_rules', JSON.stringify(nextRules));
+            localStorage.setItem('rrb_field_severities', JSON.stringify(nextSeverities));
+            localStorage.setItem('rrb_missing_severities', JSON.stringify(nextMissingSeverities));
+            this.showRulesModal = false;
+            this.refreshFieldStatuses();
+            if (this.report.length) this.runReport(false);
+            this.showStatus('Grading rules applied.', false);
+        },
+        ruleDescription(rule) {
+            if (rule === 'normalized') return 'Ignore case, extra spaces, and punctuation spacing.';
+            if (rule === 'prefix') return `Compare the first ${Number(this.prefixLength) || 10} normalized characters.`;
+            if (rule === 'ignored') return 'Do not count this field in the score.';
+            return 'Compare the visible value directly.';
+        },
+        async pickFolder(target) {
+            const current = target === 'input' ? this.inputDir : target === 'gt' ? this.gtDir : this.outputsDir;
+            try {
+                const q = new URLSearchParams({ path: current || '' });
+                const response = await fetch(`/api/pick-folder?${q.toString()}`);
+                const data = await response.json();
+                if (response.ok && data.path) {
+                    if (target === 'input') this.inputDir = data.path;
+                    if (target === 'gt') this.gtDir = data.path;
+                    if (target === 'outputs') this.outputsDir = data.path;
+                } else if (!data.cancelled) {
+                    this.showStatus(data.error || 'Folder picker did not return a path.', true);
+                }
+            } catch (e) {
+                this.showStatus(`Folder picker failed: ${e.message}`, true);
+            }
+        },
+        async scanBench() {
+            if (!this.inputDir || !this.gtDir || !this.outputsDir) {
+                this.showStatus('Select input, ground truth, and outputs folders.', true);
                 return;
             }
-            localStorage.setItem('pair_input_dir', this.inputDir);
-            localStorage.setItem('pair_output_dir', this.outputDir);
-
+            localStorage.setItem('rrb_input_dir', this.inputDir);
+            localStorage.setItem('rrb_gt_dir', this.gtDir);
+            localStorage.setItem('rrb_outputs_dir', this.outputsDir);
             try {
-                const q = new URLSearchParams({ input: this.inputDir, output: this.outputDir });
-                const r = await fetch(`/api/scan?${q.toString()}`);
-                if (!r.ok) throw new Error("Could not process mapping scan API request.");
-                const d = await r.json();
-                this.pairs = d.pairs || [];
-                if (this.pairs.length > 0) {
-                    this.showStatus(`Found ${this.pairs.length} synchronized document pairs.`, false);
-                } else {
-                    this.showStatus("No matching file pairs discovered. Ensure naming conventions align.", true);
-                }
-            } catch (err) {
-                this.showStatus(err.message, true);
+                const q = new URLSearchParams({ input: this.inputDir, ground_truth: this.gtDir, outputs: this.outputsDir });
+                const response = await fetch(`/api/scan-bench?${q.toString()}`);
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Scan failed.');
+                this.documents = data.documents || [];
+                this.pipelines = data.pipelines || [];
+                this.selectedPipelineName = this.selectedPipelineName || this.pipelines[0]?.name || '';
+                this.jsonCache = {};
+                this.report = [];
+                this.expandedPipelines = {};
+                this.showStatus(`Scanned ${this.documents.length} documents and ${this.pipelines.length} pipelines.`, false);
+            } catch (e) {
+                this.showStatus(e.message, true);
             }
         },
-        selectPair(pair) {
-            this.selectedPair = pair;
+        async readJson(path) {
+            if (!path) return cloneDefault();
+            if (this.jsonCache[path]) return this.sanitizeForm(this.jsonCache[path]);
+            const response = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
+            if (!response.ok) return cloneDefault();
+            const data = await response.json();
+            this.jsonCache[path] = data;
+            return this.sanitizeForm(data);
         },
-        async loadPairDetails(pair) {
-            this.activePair = pair;
-            this.activeDocName = this.getFileName(pair.input_path);
-            this.activeOutputPath = pair.output_path;
-            
-            // 1. Fetch file visual
-            this.loadingDocument = true;
+        sanitizeForm(raw) {
+            const base = cloneDefault();
+            const merged = { ...base, ...(raw || {}) };
+            merged.buyer = { ...base.buyer, ...(raw?.buyer || {}) };
+            merged.counterparty = { ...base.counterparty, ...(raw?.counterparty || {}) };
+            merged.items = Array.isArray(raw?.items) ? raw.items.map(item => ({ title: '', description: '', code: '', amount: 0, unit: '', item_price: 0, item_sum: 0, vat_sum: 0, total_sum: 0, ...item })) : [];
+            return merged;
+        },
+        async openReview(document, pipelineName) {
+            if (!document) return;
+            this.activeDocument = document;
+            this.selectedPipelineName = pipelineName || this.selectedPipelineName || this.pipelines[0]?.name || '';
+            this.mainTab = 'review';
+            this.rightJsonTab = this.rightJsonTab || 'gt';
+            this.gtJson = await this.readJson(document.gt_path);
+            this.outputJson = await this.readJson(document.outputs?.[this.selectedPipelineName]);
+            this.formFields = this.sanitizeForm(this.rightJsonTab === 'gt' ? this.gtJson : this.outputJson);
+            this.activeOutputPath = this.rightJsonTab === 'gt' ? document.gt_path : (document.outputs?.[this.selectedPipelineName] || '');
+            this.refreshFieldStatuses();
+            await this.loadDocumentPreview(document.input_path);
+        },
+        async loadDocumentPreview(path) {
+            this.activeDocName = this.getFileName(path);
             this.docSrc = '';
-            this.isPdf = pair.input_path.toLowerCase().endsWith('.pdf');
-            const fileUrl = `/api/file?path=${encodeURIComponent(pair.input_path)}`;
-            
+            if (!path) return;
+            this.loadingDocument = true;
+            this.isPdf = path.toLowerCase().endsWith('.pdf');
+            const fileUrl = `/api/file?path=${encodeURIComponent(path)}`;
             if (this.isPdf) {
                 try {
-                    const pdfData = await pdfjsLib.getDocument(fileUrl).promise;
-                    const page = await pdfData.getPage(1);
-                    const viewport = page.getViewport({ scale: 2.0 });
+                    const pdf = await pdfjsLib.getDocument(fileUrl).promise;
+                    const page = await pdf.getPage(1);
+                    const viewport = page.getViewport({ scale: 2 });
                     const canvas = this.$refs.pdfCanvas;
                     const context = canvas.getContext('2d');
-                    canvas.height = viewport.height;
                     canvas.width = viewport.width;
-                    
-                    await page.render({ canvasContext: context, viewport: viewport }).promise;
-                    this.docSrc = 'pdf'; // truthy value to show container
+                    canvas.height = viewport.height;
+                    await page.render({ canvasContext: context, viewport }).promise;
+                    this.docSrc = 'pdf';
                     this.resetZoom();
                 } catch (e) {
                     this.showStatus(`Failed rendering PDF: ${e.message}`, true);
@@ -468,234 +741,298 @@ createApp({
                 this.docSrc = fileUrl;
             }
             this.loadingDocument = false;
-
-            // 2. Fetch JSON content from output directory
-            try {
-                const response = await fetch(`/api/file?path=${encodeURIComponent(pair.output_path)}`);
-                if (response.ok) {
-                    const content = await response.json();
-                    this.formFields = this.sanitizeForm(content);
-                } else {
-                    this.formFields = JSON.parse(JSON.stringify(DEFAULT_FORM_FIELDS));
-                }
-            } catch (e) {
-                this.showStatus(`Error loading matching data file: ${e.message}`, true);
-            }
         },
-        sanitizeForm(raw) {
-            const base = JSON.parse(JSON.stringify(DEFAULT_FORM_FIELDS));
-            const merged = { ...base, ...raw };
-            if (!merged.buyer || typeof merged.buyer !== 'object') merged.buyer = { ...base.buyer };
-            if (!merged.counterparty || typeof merged.counterparty !== 'object') merged.counterparty = { ...base.counterparty };
-            if (!Array.isArray(merged.items)) merged.items = [];
-            return merged;
-        },
-        async saveJson() {
+        async saveActiveJson() {
             if (!this.activeOutputPath) return;
+            this.syncActiveJson();
             try {
                 const response = await fetch('/api/save', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        path: this.activeOutputPath,
-                        content: this.formFields
-                    })
+                    body: JSON.stringify({ path: this.activeOutputPath, content: this.formFields })
                 });
-                const res = await response.json();
-                if (response.ok && res.status === 'ok') {
-                    this.showStatus("Data successfully updated and saved locally.", false);
-                } else {
-                    throw new Error(res.error || "Execution error on backend write operations.");
-                }
-            } catch (err) {
-                this.showStatus(`Save failed: ${err.message}`, true);
-            }
-        },
-
-        // Directory Picker Modal methods
-        async openDirBrowser(target) {
-            this.dirBrowserTarget = target;
-            const startingPath = target === 'input' ? this.inputDir : this.outputDir;
-            try {
-                const q = new URLSearchParams({ path: startingPath || '' });
-                const r = await fetch(`/api/pick-folder?${q.toString()}`);
-                const d = await r.json();
-                if (r.ok && d.path) {
-                    if (target === 'input') {
-                        this.inputDir = d.path;
-                    } else {
-                        this.outputDir = d.path;
-                    }
-                    return;
-                }
-                if (r.ok && d.cancelled) {
-                    return;
-                }
+                const data = await response.json();
+                if (!response.ok || data.status !== 'ok') throw new Error(data.error || 'Save failed.');
+                this.jsonCache[this.activeOutputPath] = this.sanitizeForm(this.formFields);
+                this.showStatus('Saved JSON.', false);
+                this.refreshFieldStatuses();
             } catch (e) {
-                // Fall back to the browser-safe server-side directory picker.
-            }
-            await this.loadDir(startingPath);
-            this.showDirBrowserModal = true;
-        },
-        async loadDir(path) {
-            try {
-                const q = new URLSearchParams({ path: path || '' });
-                const r = await fetch(`/api/browse?${q.toString()}`);
-                if (!r.ok) throw new Error("Navigation API request failed.");
-                this.dbBrowse = await r.json();
-                this.dbPathInput = this.dbBrowse.path || '';
-            } catch (e) {
-                this.dbBrowse.error = e.message;
+                this.showStatus(e.message, true);
             }
         },
-        loadDirJoin(sub) {
-            let p = this.dbBrowse.path;
-            const sep = this.dbBrowse.separator || '/';
-            if (!p.endsWith('/') && !p.endsWith('\\')) {
-                p += sep;
-            }
-            this.loadDir(p + sub);
+        syncActiveJson() {
+            if (this.rightJsonTab === 'gt') this.gtJson = this.sanitizeForm(this.formFields);
+            else this.outputJson = this.sanitizeForm(this.formFields);
         },
-        useCurrentDir() {
-            if (this.dirBrowserTarget === 'input') {
-                this.inputDir = this.dbBrowse.path;
-            } else if (this.dirBrowserTarget === 'output') {
-                this.outputDir = this.dbBrowse.path;
-            }
-            this.showDirBrowserModal = false;
-        },
-
-        // Manual File Loading Fallback
-        triggerManualOpen() {
-            this.$refs.manualFileInput.click();
-        },
-        async handleManualFile(e) {
-            const file = e.target.files && e.target.files[0];
-            if (!file) return;
-
-            const name = file.name.toLowerCase();
-            this.activePair = null; // Unbind scanning pair context
-            
-            if (name.endsWith('.json')) {
-                this.activeOutputPath = ''; // clear output path to prevent accidental workspace scans overwriting
-                const reader = new FileReader();
-                reader.onload = (evt) => {
-                    try {
-                        this.formFields = this.sanitizeForm(JSON.parse(evt.target.result));
-                        this.showStatus(`Loaded raw JSON configuration from ${file.name}`, false);
-                    } catch (err) {
-                        this.showStatus("Failed to parse local metadata JSON schema.", true);
-                    }
-                };
-                reader.readAsText(file);
-            } else if (name.endsWith('.pdf')) {
-                this.loadingDocument = true;
-                this.isPdf = true;
-                this.activeDocName = file.name;
-                const reader = new FileReader();
-                reader.onload = async (evt) => {
-                    try {
-                        const pdfData = await pdfjsLib.getDocument({ data: evt.target.result }).promise;
-                        const page = await pdfData.getPage(1);
-                        const viewport = page.getViewport({ scale: 2.0 });
-                        const canvas = this.$refs.pdfCanvas;
-                        const context = canvas.getContext('2d');
-                        canvas.height = viewport.height;
-                        canvas.width = viewport.width;
-                        await page.render({ canvasContext: context, viewport: viewport }).promise;
-                        this.docSrc = 'pdf';
-                        this.resetZoom();
-                    } catch (err) {
-                        this.showStatus(`Error reading PDF file: ${err.message}`, true);
-                    } finally {
-                        this.loadingDocument = false;
-                    }
-                };
-                reader.readAsArrayBuffer(file);
-            } else {
-                // Images
-                this.isPdf = false;
-                this.activeDocName = file.name;
-                const reader = new FileReader();
-                reader.onload = (evt) => {
-                    this.docSrc = evt.target.result;
-                };
-                reader.readAsDataURL(file);
-            }
-            e.target.value = ''; // Reset file input
-        },
-
-        // Interactive Invoice Form recalculations
         addLineItem() {
-            this.formFields.items.push({
-                title: '', description: '', code: '', amount: 1, unit: 'pcs', item_price: 0.00, item_sum: 0.00, vat_sum: 0.00, total_sum: 0.00
-            });
+            this.formFields.items.push({ title: '', description: '', code: '', amount: 1, unit: '', item_price: 0, item_sum: 0, vat_sum: 0, total_sum: 0 });
+            this.syncActiveJson();
         },
-        removeLineItem(idx) {
-            this.formFields.items.splice(idx, 1);
-            this.recalcTotals();
+        removeLineItem(index) {
+            this.formFields.items.splice(index, 1);
+            this.syncActiveJson();
         },
-        recalcItem(itm) {
-            itm.amount = Number(itm.amount) || 0;
-            itm.item_price = Number(itm.item_price) || 0;
-            itm.item_sum = Number((itm.amount * itm.item_price).toFixed(2));
-            
-            const rate = Number(this.formFields.vat_rate) || 0;
-            itm.vat_sum = Number((itm.item_sum * (rate / 100)).toFixed(2));
-            itm.total_sum = Number((itm.item_sum + itm.vat_sum).toFixed(2));
-            
-            this.recalcTotals();
+        buildReportExport() {
+            return {
+                version: 1,
+                generatedAt: new Date().toISOString(),
+                inputDir: this.inputDir,
+                gtDir: this.gtDir,
+                outputsDir: this.outputsDir,
+                prefixLength: Number(this.prefixLength) || 10,
+                fieldRules: this.fieldRules,
+                fieldSeverities: this.fieldSeverities,
+                missingSeverities: this.missingSeverities,
+                documents: this.documents.map(document => ({
+                    name: document.name,
+                    input_path: document.input_path || '',
+                    gt_path: document.gt_path || ''
+                })),
+                pipelines: this.pipelines.map(pipeline => ({ name: pipeline.name })),
+                report: this.report.map(pipe => ({
+                    name: pipe.name,
+                    score: pipe.score,
+                    passed: pipe.passed,
+                    total: pipe.total,
+                    documents: pipe.documents.map(doc => ({
+                        name: doc.name,
+                        score: doc.score,
+                        passed: doc.passed,
+                        total: doc.total,
+                        failedFields: doc.failedFields || [],
+                        warnings: doc.warnings || [],
+                        missing: doc.missing || ''
+                    }))
+                }))
+            };
         },
-        recalcTotals() {
-            let itemsSum = 0;
-            let vatSum = 0;
-            const rate = Number(this.formFields.vat_rate) || 0;
-
-            this.formFields.items.forEach(itm => {
-                itemsSum += Number(itm.item_sum) || 0;
-                vatSum += Number(itm.vat_sum) || 0;
-            });
-
-            this.formFields.items_sum = Number(itemsSum.toFixed(2));
-            this.formFields.vat_sum = Number(vatSum.toFixed(2));
-            
-            const round = Number(this.formFields.round_sum) || 0;
-            this.formFields.total_sum = Number((this.formFields.items_sum + this.formFields.vat_sum + round).toFixed(2));
+        exportReport() {
+            if (!this.report.length) {
+                this.showStatus('Generate a report before exporting.', true);
+                return;
+            }
+            const payload = this.buildReportExport();
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            link.href = url;
+            link.download = `rrb_report_${stamp}.json`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            this.showStatus('Report JSON exported.', false);
         },
-
-        // Pan & Zoom Mechanics
+        async importReports(event) {
+            const files = Array.from(event.target.files || []);
+            if (!files.length) return;
+            const imported = [];
+            for (const file of files) {
+                try {
+                    const payload = JSON.parse(await file.text());
+                    if (!Array.isArray(payload.report)) throw new Error('Missing report array.');
+                    imported.push({
+                        id: `${file.name}-${Date.now()}-${Math.random()}`,
+                        name: file.name,
+                        generatedAt: payload.generatedAt || '',
+                        report: payload.report
+                    });
+                } catch (e) {
+                    this.showStatus(`Could not import ${file.name}: ${e.message}`, true);
+                }
+            }
+            this.comparisonReports.push(...imported);
+            if (imported.length) {
+                this.reportView = 'compare';
+                this.showStatus(`Imported ${imported.length} report file(s).`, false);
+            }
+            event.target.value = '';
+        },
+        comparePipelineFor(saved, pipelineName) {
+            return (saved.report || []).find(pipe => pipe.name === pipelineName);
+        },
+        missingDocCount(pipe) {
+            return (pipe.documents || []).filter(doc => doc.missing).length;
+        },
+        async runReport(showMessage = true) {
+            const results = [];
+            for (const pipeline of this.pipelines) {
+                const docs = [];
+                for (const document of this.documents) {
+                    let comparison;
+                    if (!document.gt_path) {
+                        comparison = { score: 0, passed: 0, total: 0, failedFields: [], statuses: {}, warnings: [], missing: 'Missing ground truth JSON' };
+                    } else if (!document.outputs?.[pipeline.name]) {
+                        const gt = await this.readJson(document.gt_path);
+                        comparison = this.missingPipelineComparison(gt, 'Missing pipeline JSON');
+                    } else {
+                        const gt = await this.readJson(document.gt_path);
+                        const output = await this.readJson(document.outputs[pipeline.name]);
+                        comparison = this.compareObjects(gt, output);
+                    }
+                    docs.push({
+                        name: document.name,
+                        document,
+                        score: comparison.score,
+                        passed: comparison.passed,
+                        total: comparison.total,
+                        failedFields: comparison.failedFields,
+                        warnings: comparison.warnings || [],
+                        missing: comparison.missing
+                    });
+                }
+                const passed = docs.reduce((sum, doc) => sum + doc.passed, 0);
+                const total = docs.reduce((sum, doc) => sum + doc.total, 0);
+                results.push({
+                    name: pipeline.name,
+                    score: total ? Math.round((passed / total) * 100) : 0,
+                    passed,
+                    total,
+                    documents: docs
+                });
+            }
+            this.report = results;
+            if (showMessage) this.showStatus('Report generated.', false);
+        },
+        missingPipelineComparison(gt, message) {
+            return {
+                score: 0,
+                passed: 0,
+                total: this.possiblePointsForGt(gt),
+                failedFields: ['__missing_output__'],
+                statuses: {},
+                warnings: [],
+                missing: message
+            };
+        },
+        possiblePointsForGt(gt) {
+            const checks = [];
+            BASE_FIELDS.forEach(path => checks.push(this.checkField(path, this.getValue(gt, path), undefined)));
+            checks.push(this.checkField('items.__count__', gt.items?.length || 0, undefined));
+            for (let i = 0; i < (gt.items?.length || 0); i++) {
+                ITEM_FIELDS.forEach(field => checks.push(this.checkField(`items[${i}].${field}`, this.getValue(gt, `items[${i}].${field}`), undefined)));
+            }
+            return checks
+                .filter(check => check.rule !== 'ignored')
+                .reduce((sum, check) => sum + check.maxPoints, 0);
+        },
+        compareObjects(gt, output) {
+            const statuses = {};
+            const checks = [];
+            BASE_FIELDS.forEach(path => checks.push(this.checkField(path, this.getValue(gt, path), this.getValue(output, path))));
+            const gtItemCount = gt.items?.length || 0;
+            const outputItemCount = output.items?.length || 0;
+            const warnings = [];
+            if (outputItemCount > gtItemCount) warnings.push(`Extra output items: ${outputItemCount - gtItemCount}`);
+            if (outputItemCount < gtItemCount) warnings.push(`Missing output items: ${gtItemCount - outputItemCount}`);
+            checks.push(this.checkField('items.__count__', gtItemCount, outputItemCount));
+            for (let i = 0; i < gtItemCount; i++) {
+                ITEM_FIELDS.forEach(field => {
+                    const path = `items[${i}].${field}`;
+                    checks.push(this.checkField(path, this.getValue(gt, path), this.getValue(output, path)));
+                });
+            }
+            checks.forEach(check => { statuses[check.path] = check; });
+            const scored = checks.filter(check => check.rule !== 'ignored');
+            const totalWeight = scored.reduce((sum, check) => sum + check.maxPoints, 0);
+            const passedWeight = scored.reduce((sum, check) => sum + check.earnedPoints, 0);
+            const failedFields = scored.filter(check => !check.passed).map(check => check.path);
+            return {
+                score: totalWeight ? Math.round((passedWeight / totalWeight) * 100) : 0,
+                passed: passedWeight,
+                total: totalWeight,
+                failedFields,
+                statuses,
+                warnings,
+                missing: ''
+            };
+        },
+        refreshFieldStatuses() {
+            this.syncActiveJson();
+            this.fieldStatuses = this.compareObjects(this.gtJson, this.outputJson).statuses;
+        },
+        checkField(path, gtValue, outputValue) {
+            const rule = this.ruleFor(path);
+            const severity = this.severityFor(path);
+            const missingSeverity = this.missingSeverityFor(path);
+            const passed = rule === 'ignored' ? true : this.compareValue(rule, gtValue, outputValue);
+            const missingOutput = this.isMissingOutput(path, gtValue, outputValue);
+            const maxPoints = Math.max(severity, missingSeverity);
+            const penalty = passed ? 0 : (missingOutput ? missingSeverity : severity);
+            const earnedPoints = Math.max(0, maxPoints - penalty);
+            return { path, rule, severity, missingSeverity, missingOutput, maxPoints, earnedPoints, passed, gtValue, outputValue };
+        },
+        ruleFor(path) {
+            if (/^items\[\d+\]\./.test(path)) {
+                const field = path.replace(/^items\[\d+\]\./, '');
+                return this.fieldRules[`items[].${field}`] || 'exact';
+            }
+            return this.fieldRules[path] || 'exact';
+        },
+        severityFor(path) {
+            if (/^items\[\d+\]\./.test(path)) {
+                const field = path.replace(/^items\[\d+\]\./, '');
+                return Math.max(1, Math.min(5, Number(this.fieldSeverities[`items[].${field}`]) || 1));
+            }
+            return Math.max(1, Math.min(5, Number(this.fieldSeverities[path]) || 1));
+        },
+        missingSeverityFor(path) {
+            if (/^items\[\d+\]\./.test(path)) {
+                const field = path.replace(/^items\[\d+\]\./, '');
+                return Math.max(1, Math.min(5, Number(this.missingSeverities[`items[].${field}`]) || 2));
+            }
+            return Math.max(1, Math.min(5, Number(this.missingSeverities[path]) || 2));
+        },
+        isMissingOutput(path, gtValue, outputValue) {
+            if (path === 'items.__count__') return Number(gtValue || 0) > 0 && Number(outputValue || 0) === 0;
+            return !this.isEmptyValue(gtValue) && this.isEmptyValue(outputValue);
+        },
+        isEmptyValue(value) {
+            return value === undefined || value === null || (typeof value === 'string' && value.trim() === '');
+        },
+        compareValue(rule, gtValue, outputValue) {
+            if (rule === 'normalized') return this.norm(gtValue) === this.norm(outputValue);
+            if (rule === 'prefix') {
+                const gt = this.norm(gtValue);
+                const out = this.norm(outputValue);
+                if (!gt && !out) return true;
+                if (!gt || !out) return false;
+                const n = Math.min(Number(this.prefixLength) || 10, gt.length, out.length);
+                return n > 0 && gt.slice(0, n) === out.slice(0, n);
+            }
+            return this.exactString(gtValue) === this.exactString(outputValue);
+        },
+        exactString(value) {
+            if (value === undefined || value === null) return '';
+            if (typeof value === 'number') return String(Number(value));
+            return String(value).trim();
+        },
+        norm(value) {
+            return this.exactString(value).toLowerCase().replace(/\s+/g, ' ').replace(/\s*([,.;:/\\()-])\s*/g, '$1').trim();
+        },
+        getValue(obj, path) {
+            const itemMatch = path.match(/^items\[(\d+)\]\.(.+)$/);
+            if (itemMatch) return obj.items?.[Number(itemMatch[1])]?.[itemMatch[2]];
+            return path.split('.').reduce((value, key) => value && value[key], obj);
+        },
+        fieldClass(path) {
+            if (this.rightJsonTab === 'gt') return '';
+            const status = this.fieldStatuses[path];
+            if (!status) return '';
+            if (status.rule === 'ignored') return 'match-ignored';
+            return status.passed ? 'match-pass' : 'match-fail';
+        },
+        togglePipeline(name) {
+            this.expandedPipelines[name] = !this.expandedPipelines[name];
+        },
         zoomIn() { this.zoomLevel = Math.min(5, this.zoomLevel + 0.15); },
         zoomOut() { this.zoomLevel = Math.max(0.3, this.zoomLevel - 0.15); },
-        resetZoom() { this.zoomLevel = 1.0; this.panX = 0; this.panY = 0; },
-        handleWheel(e) {
-            const d = e.deltaY < 0 ? 0.1 : -0.1;
-            this.zoomLevel = Math.max(0.3, Math.min(5, this.zoomLevel + d));
-        },
-        startDrag(e) {
-            this.isDragging = true;
-            this.startX = e.clientX - this.panX;
-            this.startY = e.clientY - this.panY;
-        },
-        onDrag(e) {
-            if (this.isDragging) {
-                this.panX = e.clientX - this.startX;
-                this.panY = e.clientY - this.startY;
-            }
-        },
-        endDrag() {
-            this.isDragging = false;
-        },
-
-        // Interface Messaging Helper
-        showStatus(msg, isErr = false) {
-            this.statusMsg = msg;
-            this.statusIsError = isErr;
-            if (!isErr) {
-                setTimeout(() => {
-                    if (this.statusMsg === msg) this.statusMsg = '';
-                }, 4000);
-            }
-        }
+        resetZoom() { this.zoomLevel = 1; this.panX = 0; this.panY = 0; },
+        handleWheel(e) { this.zoomLevel = Math.max(0.3, Math.min(5, this.zoomLevel + (e.deltaY < 0 ? 0.1 : -0.1))); },
+        startDrag(e) { this.isDragging = true; this.startX = e.clientX - this.panX; this.startY = e.clientY - this.panY; },
+        onDrag(e) { if (this.isDragging) { this.panX = e.clientX - this.startX; this.panY = e.clientY - this.startY; } },
+        endDrag() { this.isDragging = false; }
     }
 }).mount('#app');
 </script>

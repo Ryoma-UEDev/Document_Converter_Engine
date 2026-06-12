@@ -203,10 +203,20 @@
             <label class="text-xs font-bold">{{ t('outputFolder') }}</label>
             <div class="flex gap-2"><input v-model="batchConfig.outputDir" type="text" class="flex-1 border p-2 rounded font-mono text-xs"><button @click="openDirectoryBrowser('outputDir')" class="px-3 py-2 border rounded bg-white text-xs font-medium">{{ t('browse') }}</button></div>
           </div>
-          <label class="col-span-2 flex items-center gap-2 text-xs font-medium text-gray-700">
-            <input v-model="batchConfig.keepInputFiles" type="checkbox" class="w-4 h-4">
-            <span>{{ t('keepFilesInRoot') }}</span>
-          </label>
+          <div class="col-span-2 grid grid-cols-1 md:grid-cols-[1fr_1fr_220px] gap-3 items-end">
+            <label class="flex items-center gap-2 text-xs font-medium text-gray-700">
+              <input v-model="batchConfig.keepInputFiles" type="checkbox" class="w-4 h-4">
+              <span>{{ t('keepFilesInRoot') }}</span>
+            </label>
+            <label class="flex items-center gap-2 text-xs font-medium text-gray-700">
+              <input v-model="batchConfig.usePipelineName" type="checkbox" class="w-4 h-4">
+              <span>{{ t('usePipelineName') }}</span>
+            </label>
+            <div>
+              <label class="text-xs font-bold">{{ t('requestTimeoutSeconds') }}</label>
+              <input v-model.number="settings.requestTimeoutSeconds" type="number" min="30" step="30" class="w-full border p-2 rounded font-mono text-xs">
+            </div>
+          </div>
           <div><label class="text-xs font-bold">{{ t('batchConversionMode') }}</label><select v-model="batchConfig.mode" class="w-full border p-2 rounded bg-white text-sm"><option value="customdb">{{ t('customDbMode') }}</option><option value="xml">{{ t('xmlMode') }}</option><option value="dynamic">{{ t('dynamicMode') }}</option></select></div>
         </div>
         <p class="text-xs text-gray-500">{{ t('batchFolderHelp') }}</p>
@@ -266,6 +276,11 @@
         <div v-if="settings.provider === 'lmstudio'" class="mb-6 p-4 border rounded bg-purple-50">
             <div class="mb-4"><label class="block text-sm font-bold mb-1">{{ t('localServerUrl') }}</label><input type="text" v-model="settings.lmStudioUrl" class="w-full border p-2 rounded font-mono"></div>
             <div><label class="block text-sm font-bold mb-1">{{ t('selectLlmModel') }}</label><div class="flex gap-2"><input type="text" v-model="settings.lmStudioModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-model="modelPicker.lmStudioModel" @change="applyPickedModel('lmStudioModel')" class="w-56 border p-2 rounded bg-white font-mono text-sm"><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableLMStudioModels" :key="m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeLMStudioModels" :disabled="isProbingModels" class="px-4 py-2 bg-purple-600 text-white rounded">{{ t('probe') }}</button></div></div>
+        </div>
+        <div class="mb-6 p-4 border rounded bg-gray-50">
+            <label class="block text-sm font-bold mb-1">{{ t('jsonRetryAttempts') }}</label>
+            <input type="number" min="0" max="10" step="1" v-model.number="settings.extractionJsonRetries" class="w-32 border p-2 rounded font-mono text-sm">
+            <p class="mt-1 text-xs text-gray-500">{{ t('jsonRetryAttemptsHelp') }}</p>
         </div>
         <div class="mb-6 p-4 border rounded bg-gray-100">
           <h3 class="font-bold text-gray-800 mb-2">{{ t('ocrPreProcessing') }}</h3>
@@ -486,7 +501,7 @@ const app = createApp({
       zoomLevel:1,panX:0,panY:0,isDragging:false,startX:0,startY:0,
       activeTab:'customdb',availableOpenAiModels:[],availableOllamaModels:[],availableLMStudioModels:[],availableOcrOpenAiModels:[],availableOcrOllamaModels:[],availableOcrLMStudioModels:[],isProbingModels:false,
       modelPicker:{openAiModel:'',ollamaModel:'',lmStudioModel:'',ocrOpenAiModel:'',ocrOllamaModel:'',ocrLmStudioModel:''},
-      settings: { provider:'openai', openAiBaseUrl:'https://api.openai.com/v1', openAiKey:'', openAiModel:'gpt-4o-mini', ollamaUrl:'http://localhost:11434/v1', ollamaModel:'', lmStudioUrl:'http://localhost:1234', lmStudioModel:'', ocrProvider:'none', ocrMode:'none', googleVisionKey:'', googleVisionTextMode:'full_text', ocrOpenAiBaseUrl:'https://api.openai.com/v1', ocrOpenAiKey:'', ocrOpenAiModel:'', ocrOllamaUrl:'http://localhost:11434/v1', ocrOllamaModel:'', ocrLmStudioUrl:'http://localhost:1234', ocrLmStudioModel:'', maxTokens:2048, ollamaMaxTokens:8192, ocrMaxTokens:4096, ocrOllamaMaxTokens:8192, xmlPrompt:'', customDbPrompt:'', dynamicPrompt:'', ocrPrompt:'', customDbSchema: JSON.parse(JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA)), customJsonMapping:{}, pipelineSettings:{mode:'customdb'}, batchSettings:{inputDir:'',outputDir:'',mode:'customdb',keepInputFiles:false} },
+      settings: { provider:'openai', openAiBaseUrl:'https://api.openai.com/v1', openAiKey:'', openAiModel:'gpt-4o-mini', ollamaUrl:'http://localhost:11434/v1', ollamaModel:'', lmStudioUrl:'http://localhost:1234', lmStudioModel:'', ocrProvider:'none', ocrMode:'none', googleVisionKey:'', googleVisionTextMode:'full_text', ocrOpenAiBaseUrl:'https://api.openai.com/v1', ocrOpenAiKey:'', ocrOpenAiModel:'', ocrOllamaUrl:'http://localhost:11434/v1', ocrOllamaModel:'', ocrLmStudioUrl:'http://localhost:1234', ocrLmStudioModel:'', maxTokens:2048, ollamaMaxTokens:8192, ocrMaxTokens:4096, ocrOllamaMaxTokens:8192, extractionJsonRetries:2, requestTimeoutSeconds:240, xmlPrompt:'', customDbPrompt:'', dynamicPrompt:'', ocrPrompt:'', customDbSchema: JSON.parse(JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA)), customJsonMapping:{}, pipelineSettings:{mode:'customdb'}, batchSettings:{inputDir:'',outputDir:'',mode:'customdb',keepInputFiles:false,usePipelineName:false} },
       schemaDraft: JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA, null, 2),
       mappingDraft: '{}',
       mappingModel:{},
@@ -509,7 +524,7 @@ const app = createApp({
       rawOcrResponseText:'',
       ocrPreviewOpen:{raw:false,parsed:false},
       dynamicFilterDuplicates: localStorage.getItem('dynamic_filter_duplicates') === '1',
-      batchConfig:{inputDir:'',outputDir:'',mode:'customdb',keepInputFiles:false},
+      batchConfig:{inputDir:'',outputDir:'',mode:'customdb',keepInputFiles:false,usePipelineName:false},
       batchStatus:{running:false,config:{},totals:{processed:0,failed:0},items:[],currentFile:'',lastError:'',plannedCount:0},
       batchError:'',
       isBatchBusy:false,
@@ -766,9 +781,13 @@ const app = createApp({
       if (!Number.isFinite(Number(this.settings.ollamaMaxTokens)) || Number(this.settings.ollamaMaxTokens) <= 0) this.settings.ollamaMaxTokens = 8192;
       if (!Number.isFinite(Number(this.settings.ocrMaxTokens)) || Number(this.settings.ocrMaxTokens) <= 0) this.settings.ocrMaxTokens = 4096;
       if (!Number.isFinite(Number(this.settings.ocrOllamaMaxTokens)) || Number(this.settings.ocrOllamaMaxTokens) <= 0) this.settings.ocrOllamaMaxTokens = 8192;
+      if (!Number.isFinite(Number(this.settings.extractionJsonRetries)) || Number(this.settings.extractionJsonRetries) < 0) this.settings.extractionJsonRetries = 2;
+      this.settings.extractionJsonRetries = Math.floor(Number(this.settings.extractionJsonRetries));
+      if (!Number.isFinite(Number(this.settings.requestTimeoutSeconds)) || Number(this.settings.requestTimeoutSeconds) <= 0) this.settings.requestTimeoutSeconds = 240;
+      this.settings.requestTimeoutSeconds = Math.floor(Number(this.settings.requestTimeoutSeconds));
       if (!this.isPlainObject(this.settings.customDbSchema)) this.settings.customDbSchema = this.clone(DEFAULT_CUSTOMDB_SCHEMA);
       if (!this.isPlainObject(this.settings.customJsonMapping)) this.settings.customJsonMapping = {};
-      if (!this.isPlainObject(this.settings.batchSettings)) this.settings.batchSettings = { inputDir:'', outputDir:'', mode:'customdb', keepInputFiles:false };
+      if (!this.isPlainObject(this.settings.batchSettings)) this.settings.batchSettings = { inputDir:'', outputDir:'', mode:'customdb', keepInputFiles:false, usePipelineName:false };
       this.batchConfig = { ...this.batchConfig, ...this.settings.batchSettings };
       if (!this.isPlainObject(this.settings.pipelineSettings)) this.settings.pipelineSettings = { mode: this.activeTab || 'customdb' };
       this.settings.pipelineSettings.mode = this.normalizeMode(this.settings.pipelineSettings.mode);
@@ -1034,7 +1053,8 @@ const app = createApp({
         inputDir: this.batchConfig.inputDir || '',
         outputDir: this.batchConfig.outputDir || '',
         mode: this.batchConfig.mode || 'customdb',
-        keepInputFiles: Boolean(this.batchConfig.keepInputFiles)
+        keepInputFiles: Boolean(this.batchConfig.keepInputFiles),
+        usePipelineName: Boolean(this.batchConfig.usePipelineName)
       };
     },
     syncBatchStatus(data) {
@@ -1081,6 +1101,9 @@ const app = createApp({
     async runBatchOnce() {
       this.isBatchBusy = true; this.batchError = '';
       try {
+        if (!this.applyDraftSettings()) throw new Error(this.settingsError || 'Could not apply settings.');
+        const settingsResponse = await fetch(`${this.apiBase()}/api/settings/save`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ settings:this.settings }) });
+        if (!settingsResponse.ok) throw new Error(await settingsResponse.text());
         const r = await fetch(`${this.apiBase()}/api/batch/run-once`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(this.batchPayload()) });
         if (!r.ok) throw new Error(await r.text());
         this.syncBatchStatus(await r.json());

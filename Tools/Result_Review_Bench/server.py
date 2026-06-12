@@ -4,6 +4,8 @@ import json
 import os
 import urllib.parse
 
+INPUT_EXTENSIONS = {'.pdf', '.png', '.jpg', '.jpeg', '.webp'}
+
 def get_roots():
     if os.name == 'nt':
         roots = []
@@ -87,6 +89,16 @@ class DocumentHandler(http.server.SimpleHTTPRequestHandler):
                 except Exception as e:
                     pass
             self.send_json({'pairs': pairs})
+
+        elif url.path == '/api/scan-bench':
+            input_dir = params.get('input', [''])[0]
+            gt_dir = params.get('ground_truth', [''])[0]
+            outputs_dir = params.get('outputs', [''])[0]
+            try:
+                result = self.scan_benchmark(input_dir, gt_dir, outputs_dir)
+                self.send_json(result)
+            except Exception as e:
+                self.send_json({'error': str(e), 'documents': [], 'pipelines': []}, status=500)
             
         elif url.path == '/api/file':
             file_path = params.get('path', [''])[0]
@@ -106,6 +118,58 @@ class DocumentHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(404, "File Not Found")
         else:
             super().do_GET()
+
+    def scan_benchmark(self, input_dir, gt_dir, outputs_dir):
+        for label, path in [('input', input_dir), ('ground truth', gt_dir), ('outputs', outputs_dir)]:
+            if not path or not os.path.isdir(path):
+                raise ValueError(f'Missing or invalid {label} folder: {path}')
+
+        input_files = {}
+        for name in os.listdir(input_dir):
+            stem, ext = os.path.splitext(name)
+            if ext.lower() in INPUT_EXTENSIONS:
+                input_files[stem.lower()] = name
+
+        gt_files = {}
+        for name in os.listdir(gt_dir):
+            stem, ext = os.path.splitext(name)
+            if ext.lower() == '.json':
+                gt_files[stem.lower()] = name
+
+        pipelines = []
+        pipeline_outputs = {}
+        for name in sorted(os.listdir(outputs_dir)):
+            path = os.path.join(outputs_dir, name)
+            if not os.path.isdir(path):
+                continue
+            outputs = {}
+            for file_name in os.listdir(path):
+                stem, ext = os.path.splitext(file_name)
+                if ext.lower() == '.json':
+                    outputs[stem.lower()] = file_name
+            if not outputs:
+                continue
+            pipelines.append({'name': name, 'path': os.path.abspath(path), 'count': len(outputs)})
+            pipeline_outputs[name] = {'path': path, 'files': outputs}
+
+        documents = []
+        all_keys = sorted(set(input_files.keys()) | set(gt_files.keys()))
+        for key in all_keys:
+            input_name = input_files.get(key, '')
+            gt_name = gt_files.get(key, '')
+            outputs = {}
+            for pipeline in pipelines:
+                pipeline_name = pipeline['name']
+                pipeline_file = pipeline_outputs[pipeline_name]['files'].get(key)
+                outputs[pipeline_name] = os.path.abspath(os.path.join(pipeline_outputs[pipeline_name]['path'], pipeline_file)) if pipeline_file else ''
+            documents.append({
+                'name': os.path.splitext(input_name or gt_name)[0],
+                'input_path': os.path.abspath(os.path.join(input_dir, input_name)) if input_name else '',
+                'gt_path': os.path.abspath(os.path.join(gt_dir, gt_name)) if gt_name else '',
+                'outputs': outputs
+            })
+
+        return {'documents': documents, 'pipelines': pipelines}
 
     def do_POST(self):
         if self.path == '/api/save':

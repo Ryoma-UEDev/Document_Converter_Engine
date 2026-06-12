@@ -11,8 +11,13 @@ SUPPORTED_EXTENSIONS = (".pdf", ".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff
 
 
 class BatchWorker:
-    def __init__(self, convert_file: Callable[[Path, str], Dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        convert_file: Callable[[Path, str], Dict[str, Any]],
+        get_pipeline_name: Optional[Callable[[], str]] = None,
+    ) -> None:
         self._convert_file = convert_file
+        self._get_pipeline_name = get_pipeline_name or (lambda: "OCR_None_LLM_Unspecified")
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -22,6 +27,8 @@ class BatchWorker:
         self._current_file = ""
         self._last_error = ""
         self._run_dir = ""
+        self._result_dir = ""
+        self._pipeline_name = ""
         self._seen_inputs = set()
         self._planned_count = 0
 
@@ -31,6 +38,7 @@ class BatchWorker:
             "outputDir": "",
             "mode": "customdb",
             "keepInputFiles": False,
+            "usePipelineName": False,
         }
 
     def status(self) -> Dict[str, Any]:
@@ -39,6 +47,8 @@ class BatchWorker:
                 "running": self._thread is not None and self._thread.is_alive(),
                 "config": dict(self._config),
                 "runDir": self._run_dir,
+                "resultDir": self._result_dir,
+                "pipelineName": self._pipeline_name,
                 "currentFile": self._current_file,
                 "lastError": self._last_error,
                 "totals": dict(self._totals),
@@ -79,27 +89,31 @@ class BatchWorker:
             value = config.get(key)
             if value is not None:
                 clean[key] = str(value).strip()
-        if "keepInputFiles" in config:
-            value = config.get("keepInputFiles")
+        for key in ("keepInputFiles", "usePipelineName"):
+            if key not in config:
+                continue
+            value = config.get(key)
             if isinstance(value, str):
-                clean["keepInputFiles"] = value.strip().lower() in ("1", "true", "yes", "on")
+                clean[key] = value.strip().lower() in ("1", "true", "yes", "on")
             else:
-                clean["keepInputFiles"] = bool(value)
+                clean[key] = bool(value)
         return clean
 
     def _resolved_config(self) -> Dict[str, Any]:
         with self._lock:
             config = dict(self._config)
             run_dir = self._run_dir
+            result_dir = self._result_dir
         input_dir = Path(config.get("inputDir", "")).expanduser()
         output_dir = Path(config.get("outputDir", "")).expanduser()
         run_path = Path(run_dir).expanduser() if run_dir else None
+        result_path = Path(result_dir).expanduser() if result_dir else None
         return {
             **config,
             "inputPath": input_dir,
             "outputPath": output_dir,
             "runPath": run_path,
-            "resultPath": run_path / "output" if run_path else None,
+            "resultPath": result_path,
             "processedPath": run_path / "processed" if run_path else None,
             "logPath": run_path / "batch.log" if run_path else None,
             "errorLogPath": run_path / "errors.log" if run_path else None,
@@ -117,16 +131,25 @@ class BatchWorker:
 
     def _prepare_run_folder(self) -> None:
         config = self._resolved_config()
-        stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        run_path = self._unique_path(config["outputPath"] / f"batch_{stamp}")
-        result_path = run_path / "output"
+        now = datetime.now()
+        folder_stamp = now.strftime("%Y-%m-%d")
+        log_stamp = now.strftime("%Y-%m-%d %H:%M:%S")
+        run_path = config["outputPath"] / f"batch_{folder_stamp}"
+        pipeline_name = self._get_pipeline_name()
+        result_folder_name = pipeline_name if config.get("usePipelineName") else "output"
+        result_path = run_path / result_folder_name
         processed_path = run_path / "processed"
         result_path.mkdir(parents=True, exist_ok=True)
         processed_path.mkdir(parents=True, exist_ok=True)
-        (run_path / "batch.log").write_text(f"Batch started: {stamp}\n", encoding="utf-8")
-        (run_path / "errors.log").write_text("", encoding="utf-8")
+        with (run_path / "batch.log").open("a", encoding="utf-8") as handle:
+            handle.write(
+                f"\nBatch started: {log_stamp}\nPipeline: {pipeline_name}\nResult folder: {result_folder_name}\n"
+            )
+        (run_path / "errors.log").touch(exist_ok=True)
         with self._lock:
             self._run_dir = str(run_path)
+            self._result_dir = str(result_path)
+            self._pipeline_name = pipeline_name
             self._seen_inputs = set()
             self._planned_count = 0
             self._totals = {"processed": 0, "failed": 0}

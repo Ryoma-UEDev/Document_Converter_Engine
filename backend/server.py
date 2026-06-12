@@ -2,6 +2,7 @@ import base64
 import copy
 import io
 import json
+import re
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -101,6 +102,8 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "ollamaMaxTokens": 8192,
     "ocrMaxTokens": 4096,
     "ocrOllamaMaxTokens": 8192,
+    "extractionJsonRetries": 2,
+    "requestTimeoutSeconds": 240,
     "customDbSchema": DEFAULT_CUSTOMDB_SCHEMA,
     "customJsonMapping": {},
     "pipelineSettings": {
@@ -111,6 +114,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "outputDir": "",
         "mode": CUSTOMDB_MODE,
         "keepInputFiles": False,
+        "usePipelineName": False,
     },
 }
 
@@ -118,6 +122,8 @@ DEFAULT_MAX_TOKENS = 2048
 DEFAULT_OLLAMA_MAX_TOKENS = 8192
 DEFAULT_OCR_MAX_TOKENS = 4096
 DEFAULT_OCR_OLLAMA_MAX_TOKENS = 8192
+DEFAULT_EXTRACTION_JSON_RETRIES = 2
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 240
 
 
 def utc_now() -> str:
@@ -170,6 +176,14 @@ def normalize_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
         settings["customDbSchema"] = copy.deepcopy(DEFAULT_CUSTOMDB_SCHEMA)
     if not isinstance(settings.get("customJsonMapping"), dict):
         settings["customJsonMapping"] = {}
+    settings["extractionJsonRetries"] = _nonnegative_int(
+        settings.get("extractionJsonRetries"),
+        DEFAULT_EXTRACTION_JSON_RETRIES,
+    )
+    settings["requestTimeoutSeconds"] = _positive_int(
+        settings.get("requestTimeoutSeconds"),
+        DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    )
     if not isinstance(settings.get("pipelineSettings"), dict):
         settings["pipelineSettings"] = {"mode": CUSTOMDB_MODE}
     settings["pipelineSettings"]["mode"] = normalize_mode(settings["pipelineSettings"].get("mode"))
@@ -196,6 +210,36 @@ def load_base_settings() -> Dict[str, Any]:
             settings.pop("updbSchema", None)
             settings.pop("filterDuplicates", None)
     return normalize_settings(settings)
+
+
+def _safe_pipeline_component(value: Any) -> str:
+    text = str(value or "Unspecified").strip() or "Unspecified"
+    text = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", text)
+    text = re.sub(r"_+", "_", text).strip(" ._")
+    return text or "Unspecified"
+
+
+def build_pipeline_name(settings: Dict[str, Any]) -> str:
+    normalized = normalize_settings(copy.deepcopy(settings))
+    ocr_provider = normalize_ocr_provider(normalized)
+    if ocr_provider == "none":
+        ocr_name = "None"
+    elif ocr_provider == "google":
+        ocr_name = "GoogleVision"
+    else:
+        ocr_name = {
+            "ollama": normalized.get("ocrOllamaModel"),
+            "lmstudio": normalized.get("ocrLmStudioModel"),
+            "openai": normalized.get("ocrOpenAiModel"),
+        }.get(ocr_provider)
+
+    llm_provider = normalize_provider(normalized.get("provider"))
+    llm_name = {
+        "ollama": normalized.get("ollamaModel"),
+        "lmstudio": normalized.get("lmStudioModel"),
+        "openai": normalized.get("openAiModel"),
+    }.get(llm_provider)
+    return f"OCR_{_safe_pipeline_component(ocr_name)}_LLM_{_safe_pipeline_component(llm_name)}"
 
 
 class JobStore:
@@ -286,6 +330,14 @@ def _positive_int(value: Any, default: int) -> int:
     return parsed if parsed > 0 else default
 
 
+def _nonnegative_int(value: Any, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed >= 0 else default
+
+
 def _message_text_from_chat_response(data: Dict[str, Any], label: str) -> str:
     choices = data.get("choices") or []
     if not choices:
@@ -317,6 +369,7 @@ def _openai_chat(
     max_tokens: int = DEFAULT_MAX_TOKENS,
     label: str = "Model",
     disable_reasoning: bool = False,
+    timeout_seconds: int = DEFAULT_REQUEST_TIMEOUT_SECONDS,
 ) -> str:
     content = [{"type": "text", "text": prompt}]
     if doc_text:
@@ -336,14 +389,15 @@ def _openai_chat(
     }
     if disable_reasoning:
         payload["reasoning_effort"] = "none"
-    r = requests.post(url, headers=headers, json=payload, timeout=240)
+    timeout_seconds = _positive_int(timeout_seconds, DEFAULT_REQUEST_TIMEOUT_SECONDS)
+    r = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
     if disable_reasoning and r.status_code >= 400 and "reasoning" in r.text.lower():
         payload["reasoning_effort"] = "false"
-        r = requests.post(url, headers=headers, json=payload, timeout=240)
+        r = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
     if disable_reasoning and r.status_code >= 400 and "reasoning" in r.text.lower():
         payload.pop("reasoning_effort", None)
         payload["messages"][0]["content"][0]["text"] = "/no_think\n" + prompt
-        r = requests.post(url, headers=headers, json=payload, timeout=240)
+        r = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
     r.raise_for_status()
     data = r.json()
     try:
@@ -352,7 +406,7 @@ def _openai_chat(
         if disable_reasoning and "returned reasoning but no final content" in str(exc):
             payload.pop("reasoning_effort", None)
             payload["messages"][0]["content"][0]["text"] = "/no_think\n" + prompt
-            r = requests.post(url, headers=headers, json=payload, timeout=240)
+            r = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
             r.raise_for_status()
             return _message_text_from_chat_response(r.json(), label)
         raise
@@ -492,6 +546,7 @@ def _run_chat_provider(settings: Dict[str, Any], prompt: str, base64_image: Opti
             _positive_int(settings.get("ollamaMaxTokens"), DEFAULT_OLLAMA_MAX_TOKENS),
             "Ollama extraction model",
             True,
+            _positive_int(settings.get("requestTimeoutSeconds"), DEFAULT_REQUEST_TIMEOUT_SECONDS),
         )
     if provider == "lmstudio":
         lm_url = settings.get("lmStudioUrl", "http://localhost:1234").rstrip("/")
@@ -504,6 +559,8 @@ def _run_chat_provider(settings: Dict[str, Any], prompt: str, base64_image: Opti
             doc_text,
             _positive_int(settings.get("maxTokens"), DEFAULT_MAX_TOKENS),
             "LM Studio extraction model",
+            False,
+            _positive_int(settings.get("requestTimeoutSeconds"), DEFAULT_REQUEST_TIMEOUT_SECONDS),
         )
     return _openai_chat(
         f"{settings.get('openAiBaseUrl', '').rstrip('/')}/chat/completions",
@@ -514,7 +571,46 @@ def _run_chat_provider(settings: Dict[str, Any], prompt: str, base64_image: Opti
         doc_text,
         _positive_int(settings.get("maxTokens"), DEFAULT_MAX_TOKENS),
         "OpenAI-compatible extraction model",
+        False,
+        _positive_int(settings.get("requestTimeoutSeconds"), DEFAULT_REQUEST_TIMEOUT_SECONDS),
     )
+
+
+def _parse_extraction_output(mode: str, output: str) -> Any:
+    if mode not in (XML_MODE, CUSTOMDB_MODE):
+        return output
+    s = output.find("{")
+    e = output.rfind("}")
+    if s < 0 or e <= s:
+        raise ValueError("Extraction model did not return a JSON object.")
+    return json.loads(output[s : e + 1])
+
+
+def _run_extraction_with_json_retries(
+    mode: str,
+    settings: Dict[str, Any],
+    prompt: str,
+    base64_image: Optional[str],
+    doc_text: Optional[str],
+) -> Dict[str, Any]:
+    retries = _nonnegative_int(settings.get("extractionJsonRetries"), DEFAULT_EXTRACTION_JSON_RETRIES)
+    attempts = retries + 1
+    last_error: Optional[Exception] = None
+    last_output = ""
+
+    for attempt in range(1, attempts + 1):
+        try:
+            output = _run_chat_provider(settings, prompt, base64_image, doc_text)
+            last_output = output
+            parsed = _parse_extraction_output(mode, output)
+            return {"parsed": parsed, "raw_response": output, "attempts": attempt}
+        except (ValueError, json.JSONDecodeError) as exc:
+            last_error = exc
+            if attempt >= attempts:
+                break
+
+    detail = str(last_error) if last_error else "unknown error"
+    raise ValueError(f"Extraction model did not return valid JSON after {attempts} attempt(s): {detail}") from last_error
 
 
 def _run_vlm_ocr(settings: Dict[str, Any], base64_image: str) -> str:
@@ -532,6 +628,7 @@ def _run_vlm_ocr(settings: Dict[str, Any], base64_image: str) -> str:
             _positive_int(settings.get("ocrOllamaMaxTokens"), DEFAULT_OCR_OLLAMA_MAX_TOKENS),
             "Ollama OCR model",
             True,
+            _positive_int(settings.get("requestTimeoutSeconds"), DEFAULT_REQUEST_TIMEOUT_SECONDS),
         )
     if ocr_provider == "lmstudio":
         lm_url = settings.get("ocrLmStudioUrl") or settings.get("lmStudioUrl", "http://localhost:1234")
@@ -544,6 +641,8 @@ def _run_vlm_ocr(settings: Dict[str, Any], base64_image: str) -> str:
             None,
             _positive_int(settings.get("ocrMaxTokens"), DEFAULT_OCR_MAX_TOKENS),
             "LM Studio OCR model",
+            False,
+            _positive_int(settings.get("requestTimeoutSeconds"), DEFAULT_REQUEST_TIMEOUT_SECONDS),
         )
     if ocr_provider == "openai":
         return _openai_chat(
@@ -555,6 +654,8 @@ def _run_vlm_ocr(settings: Dict[str, Any], base64_image: str) -> str:
             None,
             _positive_int(settings.get("ocrMaxTokens"), DEFAULT_OCR_MAX_TOKENS),
             "OpenAI-compatible OCR model",
+            False,
+            _positive_int(settings.get("requestTimeoutSeconds"), DEFAULT_REQUEST_TIMEOUT_SECONDS),
         )
     raise ValueError(f"Unsupported OCR provider: {ocr_provider}")
 
@@ -579,19 +680,12 @@ def _run_conversion(mode: str, base64_image: str, settings: Dict[str, Any]) -> D
         raw_ocr = _run_vlm_ocr(settings, base64_image)
         doc_text = raw_ocr
 
-    out = _run_chat_provider(settings, prompt, None if doc_text else base64_image, doc_text)
-
-    parsed: Any = out
-    if mode in (XML_MODE, CUSTOMDB_MODE):
-        s = out.find("{")
-        e = out.rfind("}")
-        if s < 0 or e <= s:
-            raise ValueError("Extraction model did not return a JSON object.")
-        parsed = json.loads(out[s : e + 1])
+    extraction = _run_extraction_with_json_retries(mode, settings, prompt, None if doc_text else base64_image, doc_text)
 
     return {
-        "result": parsed,
-        "raw_response": out,
+        "result": extraction["parsed"],
+        "raw_response": extraction["raw_response"],
+        "extraction_attempts": extraction["attempts"],
         "raw_ocr_text": raw_ocr,
         "raw_ocr_response": raw_ocr_response,
     }
@@ -617,6 +711,7 @@ def _process_job(job_id: str, mode: str, base64_image: str, settings: Dict[str, 
             stage="Completed",
             result=conversion["result"],
             raw_response=conversion["raw_response"],
+            extraction_attempts=conversion.get("extraction_attempts", 1),
             raw_ocr_text=conversion["raw_ocr_text"],
             raw_ocr_response=conversion["raw_ocr_response"],
             completed_at=utc_now(),
@@ -641,7 +736,7 @@ def _convert_batch_file(file_path: Path, mode: str) -> Dict[str, Any]:
     return _run_conversion(mode, base64_image, settings)
 
 
-batch_worker = BatchWorker(_convert_batch_file)
+batch_worker = BatchWorker(_convert_batch_file, lambda: build_pipeline_name(load_base_settings()))
 
 
 @app.get("/api/health")
