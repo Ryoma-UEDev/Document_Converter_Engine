@@ -23,6 +23,7 @@
   "ocrMaxTokens": 4096,
   "ocrOllamaMaxTokens": 8192,
   "extractionJsonRetries": 2,
+  "enforceJsonOutput": false,
   "requestTimeoutSeconds": 240,
   "xmlPrompt": "Analyze this invoice image. Extract the following fields and return ONLY a raw JSON object. Do not explain anything. Output nothing but the JSON. If a field is missing, output an empty string \"\".",
   "customDbPrompt": "You are an expert assistant for document-to-database extraction.\nYou will receive text or an image of an invoice.\nThe document may contain Estonian, Russian, or mixed Estonian/Russian labels.\n\nYOUR TASK: Extract all invoice data and return it as a single raw JSON object matching the injected schema.\n\nRULES:\n- Return ONLY the JSON object. No markdown, no explanation, no code blocks.\n- Use \"\" for missing text fields, use 0 for missing number fields.\n- All number fields must be numeric, not strings.\n- Dates must be in YYYY-MM-DD format.\n\n{{CUSTOMDB_SCHEMA_JSON}}",

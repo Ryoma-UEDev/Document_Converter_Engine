@@ -278,9 +278,18 @@
             <div><label class="block text-sm font-bold mb-1">{{ t('selectLlmModel') }}</label><div class="flex gap-2"><input type="text" v-model="settings.lmStudioModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-model="modelPicker.lmStudioModel" @change="applyPickedModel('lmStudioModel')" class="w-56 border p-2 rounded bg-white font-mono text-sm"><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableLMStudioModels" :key="m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeLMStudioModels" :disabled="isProbingModels" class="px-4 py-2 bg-purple-600 text-white rounded">{{ t('probe') }}</button></div></div>
         </div>
         <div class="mb-6 p-4 border rounded bg-gray-50">
-            <label class="block text-sm font-bold mb-1">{{ t('jsonRetryAttempts') }}</label>
-            <input type="number" min="0" max="10" step="1" v-model.number="settings.extractionJsonRetries" class="w-32 border p-2 rounded font-mono text-sm">
+            <div class="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-3 items-end">
+                <div>
+                    <label class="block text-sm font-bold mb-1">{{ t('jsonRetryAttempts') }}</label>
+                    <input type="number" min="0" max="10" step="1" v-model.number="settings.extractionJsonRetries" class="w-32 border p-2 rounded font-mono text-sm">
+                </div>
+                <label class="flex items-center gap-2 text-sm font-medium text-gray-700 pb-2">
+                    <input v-model="settings.enforceJsonOutput" type="checkbox" class="w-4 h-4">
+                    <span>{{ t('enforceJsonOutput') }}</span>
+                </label>
+            </div>
             <p class="mt-1 text-xs text-gray-500">{{ t('jsonRetryAttemptsHelp') }}</p>
+            <p class="mt-1 text-xs text-gray-500">{{ t('enforceJsonOutputHelp') }}</p>
         </div>
         <div class="mb-6 p-4 border rounded bg-gray-100">
           <h3 class="font-bold text-gray-800 mb-2">{{ t('ocrPreProcessing') }}</h3>
@@ -501,7 +510,7 @@ const app = createApp({
       zoomLevel:1,panX:0,panY:0,isDragging:false,startX:0,startY:0,
       activeTab:'customdb',availableOpenAiModels:[],availableOllamaModels:[],availableLMStudioModels:[],availableOcrOpenAiModels:[],availableOcrOllamaModels:[],availableOcrLMStudioModels:[],isProbingModels:false,
       modelPicker:{openAiModel:'',ollamaModel:'',lmStudioModel:'',ocrOpenAiModel:'',ocrOllamaModel:'',ocrLmStudioModel:''},
-      settings: { provider:'openai', openAiBaseUrl:'https://api.openai.com/v1', openAiKey:'', openAiModel:'gpt-4o-mini', ollamaUrl:'http://localhost:11434/v1', ollamaModel:'', lmStudioUrl:'http://localhost:1234', lmStudioModel:'', ocrProvider:'none', ocrMode:'none', googleVisionKey:'', googleVisionTextMode:'full_text', ocrOpenAiBaseUrl:'https://api.openai.com/v1', ocrOpenAiKey:'', ocrOpenAiModel:'', ocrOllamaUrl:'http://localhost:11434/v1', ocrOllamaModel:'', ocrLmStudioUrl:'http://localhost:1234', ocrLmStudioModel:'', maxTokens:2048, ollamaMaxTokens:8192, ocrMaxTokens:4096, ocrOllamaMaxTokens:8192, extractionJsonRetries:2, requestTimeoutSeconds:240, xmlPrompt:'', customDbPrompt:'', dynamicPrompt:'', ocrPrompt:'', customDbSchema: JSON.parse(JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA)), customJsonMapping:{}, pipelineSettings:{mode:'customdb'}, batchSettings:{inputDir:'',outputDir:'',mode:'customdb',keepInputFiles:false,usePipelineName:false} },
+      settings: { provider:'openai', openAiBaseUrl:'https://api.openai.com/v1', openAiKey:'', openAiModel:'gpt-4o-mini', ollamaUrl:'http://localhost:11434/v1', ollamaModel:'', lmStudioUrl:'http://localhost:1234', lmStudioModel:'', ocrProvider:'none', ocrMode:'none', googleVisionKey:'', googleVisionTextMode:'full_text', ocrOpenAiBaseUrl:'https://api.openai.com/v1', ocrOpenAiKey:'', ocrOpenAiModel:'', ocrOllamaUrl:'http://localhost:11434/v1', ocrOllamaModel:'', ocrLmStudioUrl:'http://localhost:1234', ocrLmStudioModel:'', maxTokens:2048, ollamaMaxTokens:8192, ocrMaxTokens:4096, ocrOllamaMaxTokens:8192, extractionJsonRetries:2, enforceJsonOutput:false, requestTimeoutSeconds:240, xmlPrompt:'', customDbPrompt:'', dynamicPrompt:'', ocrPrompt:'', customDbSchema: JSON.parse(JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA)), customJsonMapping:{}, pipelineSettings:{mode:'customdb'}, batchSettings:{inputDir:'',outputDir:'',mode:'customdb',keepInputFiles:false,usePipelineName:false} },
       schemaDraft: JSON.stringify(DEFAULT_CUSTOMDB_SCHEMA, null, 2),
       mappingDraft: '{}',
       mappingModel:{},
@@ -783,6 +792,7 @@ const app = createApp({
       if (!Number.isFinite(Number(this.settings.ocrOllamaMaxTokens)) || Number(this.settings.ocrOllamaMaxTokens) <= 0) this.settings.ocrOllamaMaxTokens = 8192;
       if (!Number.isFinite(Number(this.settings.extractionJsonRetries)) || Number(this.settings.extractionJsonRetries) < 0) this.settings.extractionJsonRetries = 2;
       this.settings.extractionJsonRetries = Math.floor(Number(this.settings.extractionJsonRetries));
+      this.settings.enforceJsonOutput = Boolean(this.settings.enforceJsonOutput);
       if (!Number.isFinite(Number(this.settings.requestTimeoutSeconds)) || Number(this.settings.requestTimeoutSeconds) <= 0) this.settings.requestTimeoutSeconds = 240;
       this.settings.requestTimeoutSeconds = Math.floor(Number(this.settings.requestTimeoutSeconds));
       if (!this.isPlainObject(this.settings.customDbSchema)) this.settings.customDbSchema = this.clone(DEFAULT_CUSTOMDB_SCHEMA);

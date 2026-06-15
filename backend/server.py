@@ -103,6 +103,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "ocrMaxTokens": 4096,
     "ocrOllamaMaxTokens": 8192,
     "extractionJsonRetries": 2,
+    "enforceJsonOutput": False,
     "requestTimeoutSeconds": 240,
     "customDbSchema": DEFAULT_CUSTOMDB_SCHEMA,
     "customJsonMapping": {},
@@ -180,6 +181,7 @@ def normalize_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
         settings.get("extractionJsonRetries"),
         DEFAULT_EXTRACTION_JSON_RETRIES,
     )
+    settings["enforceJsonOutput"] = bool(settings.get("enforceJsonOutput", False))
     settings["requestTimeoutSeconds"] = _positive_int(
         settings.get("requestTimeoutSeconds"),
         DEFAULT_REQUEST_TIMEOUT_SECONDS,
@@ -370,6 +372,7 @@ def _openai_chat(
     label: str = "Model",
     disable_reasoning: bool = False,
     timeout_seconds: int = DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    response_format: Optional[Dict[str, Any]] = None,
 ) -> str:
     content = [{"type": "text", "text": prompt}]
     if doc_text:
@@ -389,6 +392,8 @@ def _openai_chat(
     }
     if disable_reasoning:
         payload["reasoning_effort"] = "none"
+    if response_format:
+        payload["response_format"] = response_format
     timeout_seconds = _positive_int(timeout_seconds, DEFAULT_REQUEST_TIMEOUT_SECONDS)
     r = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
     if disable_reasoning and r.status_code >= 400 and "reasoning" in r.text.lower():
@@ -533,8 +538,54 @@ def _probe_lmstudio_models(base_url: str) -> List[Dict[str, str]]:
     return [{"id": m.get("id", ""), "name": m.get("id", "")} for m in models if m.get("id")]
 
 
-def _run_chat_provider(settings: Dict[str, Any], prompt: str, base64_image: Optional[str], doc_text: Optional[str]) -> str:
+def _json_schema_from_example(example: Any) -> Dict[str, Any]:
+    if isinstance(example, dict):
+        properties = {str(key): _json_schema_from_example(value) for key, value in example.items()}
+        return {
+            "type": "object",
+            "properties": properties,
+            "required": list(properties.keys()),
+            "additionalProperties": True,
+        }
+    if isinstance(example, list):
+        item_example = example[0] if example else ""
+        return {"type": "array", "items": _json_schema_from_example(item_example)}
+    if isinstance(example, bool):
+        return {"type": "boolean"}
+    if isinstance(example, (int, float)) and not isinstance(example, bool):
+        return {"type": "number"}
+    return {"type": "string"}
+
+
+def _response_format_for_mode(mode: str, settings: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if not settings.get("enforceJsonOutput"):
+        return None
+    if mode == CUSTOMDB_MODE:
+        schema = settings.get("customDbSchema")
+        if not isinstance(schema, dict):
+            schema = DEFAULT_CUSTOMDB_SCHEMA
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "customdb_invoice",
+                "strict": False,
+                "schema": _json_schema_from_example(schema),
+            },
+        }
+    if mode == XML_MODE:
+        return {"type": "json_object"}
+    return None
+
+
+def _run_chat_provider(
+    settings: Dict[str, Any],
+    prompt: str,
+    base64_image: Optional[str],
+    doc_text: Optional[str],
+    mode: str,
+) -> str:
     provider = normalize_provider(settings.get("provider"))
+    response_format = _response_format_for_mode(mode, settings)
     if provider == "ollama":
         return _openai_chat(
             f"{settings.get('ollamaUrl', '').rstrip('/')}/chat/completions",
@@ -547,6 +598,7 @@ def _run_chat_provider(settings: Dict[str, Any], prompt: str, base64_image: Opti
             "Ollama extraction model",
             True,
             _positive_int(settings.get("requestTimeoutSeconds"), DEFAULT_REQUEST_TIMEOUT_SECONDS),
+            response_format,
         )
     if provider == "lmstudio":
         lm_url = settings.get("lmStudioUrl", "http://localhost:1234").rstrip("/")
@@ -561,6 +613,7 @@ def _run_chat_provider(settings: Dict[str, Any], prompt: str, base64_image: Opti
             "LM Studio extraction model",
             False,
             _positive_int(settings.get("requestTimeoutSeconds"), DEFAULT_REQUEST_TIMEOUT_SECONDS),
+            response_format,
         )
     return _openai_chat(
         f"{settings.get('openAiBaseUrl', '').rstrip('/')}/chat/completions",
@@ -573,6 +626,7 @@ def _run_chat_provider(settings: Dict[str, Any], prompt: str, base64_image: Opti
         "OpenAI-compatible extraction model",
         False,
         _positive_int(settings.get("requestTimeoutSeconds"), DEFAULT_REQUEST_TIMEOUT_SECONDS),
+        response_format,
     )
 
 
@@ -600,7 +654,7 @@ def _run_extraction_with_json_retries(
 
     for attempt in range(1, attempts + 1):
         try:
-            output = _run_chat_provider(settings, prompt, base64_image, doc_text)
+            output = _run_chat_provider(settings, prompt, base64_image, doc_text, mode)
             last_output = output
             parsed = _parse_extraction_output(mode, output)
             return {"parsed": parsed, "raw_response": output, "attempts": attempt}
