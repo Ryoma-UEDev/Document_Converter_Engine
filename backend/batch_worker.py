@@ -132,12 +132,12 @@ class BatchWorker:
     def _prepare_run_folder(self) -> None:
         config = self._resolved_config()
         now = datetime.now()
-        folder_stamp = now.strftime("%Y-%m-%d")
+        folder_stamp = now.strftime("%Y-%m-%d_%H-%M-%S")
         log_stamp = now.strftime("%Y-%m-%d %H:%M:%S")
         run_path = config["outputPath"] / f"batch_{folder_stamp}"
         pipeline_name = self._get_pipeline_name()
-        result_folder_name = pipeline_name if config.get("usePipelineName") else "output"
-        result_path = run_path / result_folder_name
+        result_folder_base = pipeline_name if config.get("usePipelineName") else "output"
+        result_folder_name, result_path = self._result_folder(run_path, result_folder_base)
         processed_path = run_path / "processed"
         result_path.mkdir(parents=True, exist_ok=True)
         processed_path.mkdir(parents=True, exist_ok=True)
@@ -156,6 +156,17 @@ class BatchWorker:
             self._items = []
             self._current_file = ""
             self._last_error = ""
+
+    def _result_folder(self, run_path: Path, folder_base: str) -> tuple[str, Path]:
+        result_path = run_path / folder_base
+        if not result_path.exists():
+            return folder_base, result_path
+        for idx in range(1, 10000):
+            folder_name = f"{folder_base}_{idx}"
+            result_path = run_path / folder_name
+            if not result_path.exists():
+                return folder_name, result_path
+        raise ValueError(f"Could not create unique result folder for {folder_base}")
 
     def _run_once_loop(self) -> None:
         try:

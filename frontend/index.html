@@ -203,7 +203,7 @@
             <label class="text-xs font-bold">{{ t('outputFolder') }}</label>
             <div class="flex gap-2"><input v-model="batchConfig.outputDir" type="text" class="flex-1 border p-2 rounded font-mono text-xs"><button @click="openDirectoryBrowser('outputDir')" class="px-3 py-2 border rounded bg-white text-xs font-medium">{{ t('browse') }}</button></div>
           </div>
-          <div class="col-span-2 grid grid-cols-1 md:grid-cols-[1fr_1fr_220px] gap-3 items-end">
+          <div class="col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
             <label class="flex items-center gap-2 text-xs font-medium text-gray-700">
               <input v-model="batchConfig.keepInputFiles" type="checkbox" class="w-4 h-4">
               <span>{{ t('keepFilesInRoot') }}</span>
@@ -212,10 +212,6 @@
               <input v-model="batchConfig.usePipelineName" type="checkbox" class="w-4 h-4">
               <span>{{ t('usePipelineName') }}</span>
             </label>
-            <div>
-              <label class="text-xs font-bold">{{ t('requestTimeoutSeconds') }}</label>
-              <input v-model.number="settings.requestTimeoutSeconds" type="number" min="30" step="30" class="w-full border p-2 rounded font-mono text-xs">
-            </div>
           </div>
           <div><label class="text-xs font-bold">{{ t('batchConversionMode') }}</label><select v-model="batchConfig.mode" class="w-full border p-2 rounded bg-white text-sm"><option value="customdb">{{ t('customDbMode') }}</option><option value="xml">{{ t('xmlMode') }}</option><option value="dynamic">{{ t('dynamicMode') }}</option></select></div>
         </div>
@@ -278,18 +274,42 @@
             <div><label class="block text-sm font-bold mb-1">{{ t('selectLlmModel') }}</label><div class="flex gap-2"><input type="text" v-model="settings.lmStudioModel" class="flex-1 border p-2 rounded font-mono text-sm"><select v-model="modelPicker.lmStudioModel" @change="applyPickedModel('lmStudioModel')" class="w-56 border p-2 rounded bg-white font-mono text-sm"><option value="">{{ t('selectProbedModel') }}</option><option v-for="m in availableLMStudioModels" :key="m.id" :value="m.id">{{ m.name || m.id }}</option></select><button @click="probeLMStudioModels" :disabled="isProbingModels" class="px-4 py-2 bg-purple-600 text-white rounded">{{ t('probe') }}</button></div></div>
         </div>
         <div class="mb-6 p-4 border rounded bg-gray-50">
-            <div class="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-3 items-end">
+            <h3 class="font-bold text-gray-800 mb-3">{{ t('runtimeLimits') }}</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
                 <div>
                     <label class="block text-sm font-bold mb-1">{{ t('jsonRetryAttempts') }}</label>
-                    <input type="number" min="0" max="10" step="1" v-model.number="settings.extractionJsonRetries" class="w-32 border p-2 rounded font-mono text-sm">
+                    <input type="number" min="0" max="10" step="1" v-model.number="settings.extractionJsonRetries" class="w-full border p-2 rounded font-mono text-sm">
                 </div>
-                <label class="flex items-center gap-2 text-sm font-medium text-gray-700 pb-2">
+                <div>
+                    <label class="block text-sm font-bold mb-1">{{ t('requestTimeoutSeconds') }}</label>
+                    <input v-model.number="settings.requestTimeoutSeconds" type="number" min="30" step="30" class="w-full border p-2 rounded font-mono text-sm">
+                </div>
+                <label class="flex items-center gap-2 text-sm font-medium text-gray-700 pb-3">
                     <input v-model="settings.enforceJsonOutput" type="checkbox" class="w-4 h-4">
                     <span>{{ t('enforceJsonOutput') }}</span>
                 </label>
             </div>
+            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-bold mb-1">{{ t('extractionMaxTokens') }}</label>
+                    <input v-model.number="settings.maxTokens" type="number" min="128" step="128" class="w-full border p-2 rounded font-mono text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold mb-1">{{ t('ollamaExtractionMaxTokens') }}</label>
+                    <input v-model.number="settings.ollamaMaxTokens" type="number" min="128" step="128" class="w-full border p-2 rounded font-mono text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold mb-1">{{ t('ocrMaxTokens') }}</label>
+                    <input v-model.number="settings.ocrMaxTokens" type="number" min="128" step="128" class="w-full border p-2 rounded font-mono text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold mb-1">{{ t('ocrOllamaMaxTokens') }}</label>
+                    <input v-model.number="settings.ocrOllamaMaxTokens" type="number" min="128" step="128" class="w-full border p-2 rounded font-mono text-sm">
+                </div>
+            </div>
             <p class="mt-1 text-xs text-gray-500">{{ t('jsonRetryAttemptsHelp') }}</p>
             <p class="mt-1 text-xs text-gray-500">{{ t('enforceJsonOutputHelp') }}</p>
+            <p class="mt-1 text-xs text-gray-500">{{ t('tokenLimitsHelp') }}</p>
         </div>
         <div class="mb-6 p-4 border rounded bg-gray-100">
           <h3 class="font-bold text-gray-800 mb-2">{{ t('ocrPreProcessing') }}</h3>

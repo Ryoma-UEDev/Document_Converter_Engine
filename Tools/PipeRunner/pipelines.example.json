@@ -1,0 +1,29 @@
+{
+  "backendUrl": "http://localhost:8000",
+  "options": {
+    "keepInputFiles": true,
+    "usePipelineName": true,
+    "restoreOriginalSettings": true
+  },
+  "modelOptions": {
+    "ocr": {
+      "lmstudio": [],
+      "ollama": [],
+      "openai": []
+    },
+    "llm": {
+      "lmstudio": [],
+      "ollama": [],
+      "openai": []
+    }
+  },
+  "pipelines": [
+    {
+      "name": "Google Vision + LM Studio",
+      "ocrProvider": "google",
+      "ocrModel": "",
+      "llmProvider": "lmstudio",
+      "llmModel": ""
+    }
+  ]
+}

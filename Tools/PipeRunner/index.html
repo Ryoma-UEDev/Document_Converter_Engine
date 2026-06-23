@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PipeRunner</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --ink: #172033;
+      --muted: #647084;
+      --line: #d9e0ea;
+      --accent: #2563eb;
+      --accent-dark: #1d4ed8;
+      --ok: #12805c;
+      --warn: #a16207;
+      --bad: #b42318;
+      --soft-ok: #e8f7ef;
+      --soft-bad: #fff1f0;
+      --shadow: 0 10px 24px rgba(20, 31, 54, 0.08);
+      font-family: Inter, Segoe UI, Roboto, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-size: 14px;
+    }
+
+    .app {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 6px 0 0;
+      color: var(--muted);
+      max-width: 760px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .panel-body { padding: 16px; }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+      padding: 14px 16px;
+      background: #fbfcff;
+      border-radius: 8px 8px 0 0;
+    }
+
+    label {
+      display: block;
+      font-weight: 700;
+      font-size: 12px;
+      margin-bottom: 5px;
+      color: #2e3a4f;
+    }
+
+    input[type="text"], select {
+      width: 100%;
+      height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+      padding: 0 10px;
+      font: inherit;
+      min-width: 0;
+    }
+
+    input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+    }
+
+    .field { min-width: 180px; }
+    .backend-field { flex: 1 1 360px; }
+
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 38px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      font-size: 13px;
+      color: #344054;
+      white-space: nowrap;
+    }
+
+    button {
+      height: 38px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      padding: 0 14px;
+      font-weight: 700;
+      cursor: pointer;
+      background: #eef2f7;
+      color: #26354d;
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    button.primary:hover { background: var(--accent-dark); }
+    button.danger {
+      background: #fee4e2;
+      color: var(--bad);
+      border-color: #fecaca;
+    }
+
+    button.ghost {
+      background: #fff;
+      border-color: var(--line);
+    }
+
+    button:disabled {
+      opacity: .55;
+      cursor: not-allowed;
+    }
+
+    .pipeline-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .pipeline-row {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) minmax(0, 1fr) 42px;
+      gap: 12px;
+      align-items: stretch;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fff;
+    }
+
+    .row-index {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      background: #eef4ff;
+      color: #174ea6;
+      font-weight: 800;
+    }
+
+    .side {
+      border: 1px solid #e3e8f0;
+      border-radius: 8px;
+      padding: 12px;
+      background: #fbfcff;
+    }
+
+    .side h3 {
+      margin: 0 0 10px;
+      font-size: 13px;
+      color: #253858;
+    }
+
+    .side-grid {
+      display: grid;
+      grid-template-columns: 150px minmax(0, 1fr) 80px;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .name-field {
+      margin-bottom: 10px;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #243b8f;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .status-pill.running {
+      background: #fff7ed;
+      color: #9a3412;
+    }
+
+    .status-pill.done {
+      background: var(--soft-ok);
+      color: var(--ok);
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fbfcff;
+    }
+
+    .metric .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .metric .value {
+      font-size: 15px;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 8px 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .result-ok { color: var(--ok); font-weight: 800; }
+    .result-bad { color: var(--bad); font-weight: 800; }
+    .result-warn { color: var(--warn); font-weight: 800; }
+
+    .log-box {
+      height: 260px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #101828;
+      color: #d7e2f0;
+      padding: 10px;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+
+    .error {
+      border: 1px solid #fecaca;
+      background: var(--soft-bad);
+      color: var(--bad);
+      padding: 10px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      white-space: pre-wrap;
+    }
+
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+      .pipeline-row { grid-template-columns: 1fr; }
+      .row-index { height: 34px; }
+      .side-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>PipeRunner</h1>
+        <p class="subtitle">Run multiple Document Converter pipelines sequentially using the saved backend settings. Choose model pairs here; prompts, schema, mappings, folders, keys, and limits stay in the main app settings.</p>
+      </div>
+      <div id="runner-pill" class="status-pill">Idle</div>
+    </header>
+
+    <section class="panel" style="margin-bottom:16px">
+      <div class="toolbar">
+        <div class="backend-field">
+          <label>Converter backend URL</label>
+          <input id="backend-url" type="text" value="http://localhost:8000">
+        </div>
+        <label class="check">
+          <input id="keep-input-files" type="checkbox" checked>
+          <span>Keep input files</span>
+        </label>
+        <label class="check">
+          <input id="use-pipeline-name" type="checkbox" checked>
+          <span>Use pipeline name</span>
+        </label>
+        <label class="check">
+          <input id="restore-settings" type="checkbox" checked>
+          <span>Restore settings</span>
+        </label>
+        <button id="refresh-settings" class="ghost">Refresh settings</button>
+      </div>
+      <div class="panel-body">
+        <div id="error-box" class="error" style="display:none"></div>
+        <div class="summary-grid">
+          <div class="metric">
+            <div class="label">Batch input</div>
+            <div id="batch-input" class="value">-</div>
+          </div>
+          <div class="metric">
+            <div class="label">Batch output</div>
+            <div id="batch-output" class="value">-</div>
+          </div>
+          <div class="metric">
+            <div class="label">Mode</div>
+            <div id="batch-mode" class="value">-</div>
+          </div>
+          <div class="metric">
+            <div class="label">Timeout / retries</div>
+            <div id="runtime-summary" class="value">-</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="grid">
+      <main class="panel">
+        <div class="toolbar">
+          <button id="add-pipeline" class="ghost">+ Add pipeline</button>
+          <button id="save-list" class="ghost">Save list</button>
+          <button id="run-pipelines" class="primary">Run pipelines</button>
+          <button id="stop-runner" class="danger">Stop</button>
+          <span class="muted">Rows run from top to bottom. Failed rows are logged and the runner continues.</span>
+        </div>
+        <div class="panel-body">
+          <div id="pipeline-list" class="pipeline-list"></div>
+        </div>
+      </main>
+
+      <aside class="panel">
+        <div class="panel-body">
+          <h2>Report</h2>
+          <div class="summary-grid">
+            <div class="metric">
+              <div class="label">Current</div>
+              <div id="current-pipeline" class="value">-</div>
+            </div>
+            <div class="metric">
+              <div class="label">Message</div>
+              <div id="runner-message" class="value">Idle</div>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Pipeline</th>
+                <th>Status</th>
+                <th>OK</th>
+                <th>Fail</th>
+              </tr>
+            </thead>
+            <tbody id="results-body">
+              <tr><td colspan="4" class="muted">No run yet.</td></tr>
+            </tbody>
+          </table>
+          <h2 style="margin-top:18px">Log</h2>
+          <div id="log-box" class="log-box">Idle</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    const providers = {
+      llm: [
+        ['lmstudio', 'LM Studio'],
+        ['ollama', 'Ollama'],
+        ['openai', 'OpenAI-compatible']
+      ],
+      ocr: [
+        ['none', 'None'],
+        ['google', 'Google Vision'],
+        ['lmstudio', 'LM Studio'],
+        ['ollama', 'Ollama'],
+        ['openai', 'OpenAI-compatible']
+      ]
+    };
+
+    const modelProviders = new Set(['lmstudio', 'ollama', 'openai']);
+    let config = null;
+    let backendSettings = null;
+    let runner = null;
+    let pollHandle = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    function showError(message) {
+      const box = $('error-box');
+      if (!message) {
+        box.style.display = 'none';
+        box.textContent = '';
+        return;
+      }
+      box.style.display = 'block';
+      box.textContent = message;
+    }
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.error) {
+        throw new Error(data.error || response.statusText);
+      }
+      return data;
+    }
+
+    function pipelineDefault() {
+      return {
+        name: '',
+        ocrProvider: 'google',
+        ocrModel: '',
+        llmProvider: 'lmstudio',
+        llmModel: ''
+      };
+    }
+
+    function hydrateControls() {
+      $('backend-url').value = config.backendUrl || 'http://localhost:8000';
+      $('keep-input-files').checked = Boolean(config.options?.keepInputFiles ?? true);
+      $('use-pipeline-name').checked = Boolean(config.options?.usePipelineName ?? true);
+      $('restore-settings').checked = Boolean(config.options?.restoreOriginalSettings ?? true);
+      renderPipelines();
+    }
+
+    function collectConfig() {
+      config.backendUrl = $('backend-url').value.trim() || 'http://localhost:8000';
+      config.options = {
+        keepInputFiles: $('keep-input-files').checked,
+        usePipelineName: $('use-pipeline-name').checked,
+        restoreOriginalSettings: $('restore-settings').checked
+      };
+      return config;
+    }
+
+    function providerOptions(role, selected) {
+      return providers[role].map(([value, label]) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${label}</option>`).join('');
+    }
+
+    function modelOptions(role, provider, selected) {
+      const options = (((config.modelOptions || {})[role] || {})[provider] || []);
+      const unique = [...new Set(options.map(m => typeof m === 'string' ? m : (m.id || m.name || '')).filter(Boolean))];
+      const selectedMissing = selected && !unique.includes(selected) ? [selected] : [];
+      return ['<option value="">Select model</option>']
+        .concat(selectedMissing.map(m => `<option value="${escapeAttr(m)}" selected>${escapeHtml(m)}</option>`))
+        .concat(unique.map(m => `<option value="${escapeAttr(m)}" ${m === selected ? 'selected' : ''}>${escapeHtml(m)}</option>`))
+        .join('');
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value);
+    }
+
+    function renderPipelines() {
+      const list = $('pipeline-list');
+      list.innerHTML = '';
+      if (!config.pipelines || !config.pipelines.length) {
+        config.pipelines = [pipelineDefault()];
+      }
+      config.pipelines.forEach((pipeline, index) => {
+        const ocrHasModel = modelProviders.has(pipeline.ocrProvider);
+        const llmHasModel = modelProviders.has(pipeline.llmProvider);
+        const row = document.createElement('div');
+        row.className = 'pipeline-row';
+        row.innerHTML = `
+          <div class="row-index">${index + 1}</div>
+          <div class="side">
+            <h3>OCR</h3>
+            <div class="name-field">
+              <label>Pipeline label</label>
+              <input type="text" value="${escapeAttr(pipeline.name || '')}" data-index="${index}" data-field="name" placeholder="Optional display name">
+            </div>
+            <div class="side-grid">
+              <div>
+                <label>Type</label>
+                <select data-index="${index}" data-field="ocrProvider">${providerOptions('ocr', pipeline.ocrProvider)}</select>
+              </div>
+              <div>
+                <label>OCR model</label>
+                <select data-index="${index}" data-field="ocrModel" ${ocrHasModel ? '' : 'disabled'}>${modelOptions('ocr', pipeline.ocrProvider, pipeline.ocrModel)}</select>
+              </div>
+              <button data-probe-role="ocr" data-index="${index}" ${ocrHasModel ? '' : 'disabled'}>Probe</button>
+            </div>
+          </div>
+          <div class="side">
+            <h3>LLM</h3>
+            <div class="name-field">
+              <label>Selected pair</label>
+              <input type="text" value="${escapeAttr(pairSummary(pipeline))}" disabled>
+            </div>
+            <div class="side-grid">
+              <div>
+                <label>Type</label>
+                <select data-index="${index}" data-field="llmProvider">${providerOptions('llm', pipeline.llmProvider)}</select>
+              </div>
+              <div>
+                <label>LLM model</label>
+                <select data-index="${index}" data-field="llmModel" ${llmHasModel ? '' : 'disabled'}>${modelOptions('llm', pipeline.llmProvider, pipeline.llmModel)}</select>
+              </div>
+              <button data-probe-role="llm" data-index="${index}" ${llmHasModel ? '' : 'disabled'}>Probe</button>
+            </div>
+          </div>
+          <button class="danger" title="Remove" data-remove="${index}">X</button>
+        `;
+        list.appendChild(row);
+      });
+
+      list.querySelectorAll('[data-field]').forEach(control => {
+        control.addEventListener('change', onPipelineFieldChange);
+        control.addEventListener('input', onPipelineFieldChange);
+      });
+      list.querySelectorAll('[data-remove]').forEach(button => {
+        button.addEventListener('click', () => {
+          const index = Number(button.dataset.remove);
+          config.pipelines.splice(index, 1);
+          renderPipelines();
+        });
+      });
+      list.querySelectorAll('[data-probe-role]').forEach(button => {
+        button.addEventListener('click', () => probeModels(button.dataset.probeRole, Number(button.dataset.index)));
+      });
+    }
+
+    function pairSummary(pipeline) {
+      const ocr = pipeline.ocrProvider === 'none' || pipeline.ocrProvider === 'google'
+        ? providerLabel('ocr', pipeline.ocrProvider)
+        : (pipeline.ocrModel || providerLabel('ocr', pipeline.ocrProvider));
+      const llm = pipeline.llmModel || providerLabel('llm', pipeline.llmProvider);
+      return `${ocr}  ->  ${llm}`;
+    }
+
+    function providerLabel(role, value) {
+      return (providers[role].find(p => p[0] === value) || [value, value])[1];
+    }
+
+    function onPipelineFieldChange(event) {
+      const index = Number(event.target.dataset.index);
+      const field = event.target.dataset.field;
+      const oldOcrProvider = config.pipelines[index].ocrProvider;
+      const oldLlmProvider = config.pipelines[index].llmProvider;
+      config.pipelines[index][field] = event.target.value;
+      if (field === 'ocrProvider' && event.target.value !== oldOcrProvider) config.pipelines[index].ocrModel = '';
+      if (field === 'llmProvider' && event.target.value !== oldLlmProvider) config.pipelines[index].llmModel = '';
+      if (field.endsWith('Provider')) renderPipelines();
+    }
+
+    async function loadState() {
+      showError('');
+      const data = await api('/api/state');
+      config = data.config;
+      runner = data.runner;
+      hydrateControls();
+      renderRunner();
+      await refreshSettings();
+    }
+
+    async function refreshSettings() {
+      try {
+        const backendUrl = $('backend-url').value.trim() || 'http://localhost:8000';
+        backendSettings = await api(`/api/settings?backendUrl=${encodeURIComponent(backendUrl)}`);
+        renderSettingsSummary();
+      } catch (error) {
+        showError(error.message);
+      }
+    }
+
+    function renderSettingsSummary() {
+      const batch = backendSettings?.batchSettings || {};
+      $('batch-input').textContent = batch.inputDir || '-';
+      $('batch-output').textContent = batch.outputDir || '-';
+      $('batch-mode').textContent = batch.mode || backendSettings?.pipelineSettings?.mode || '-';
+      $('runtime-summary').textContent = `${backendSettings?.requestTimeoutSeconds || '-'} sec / ${backendSettings?.extractionJsonRetries ?? '-'} retries`;
+    }
+
+    function renderRunner() {
+      if (!runner) return;
+      const pill = $('runner-pill');
+      pill.textContent = runner.running ? 'Running' : (runner.finishedAt ? 'Finished' : 'Idle');
+      pill.className = `status-pill ${runner.running ? 'running' : (runner.finishedAt ? 'done' : '')}`;
+      $('current-pipeline').textContent = runner.currentName || '-';
+      $('runner-message').textContent = runner.message || '-';
+      $('stop-runner').disabled = !runner.running;
+      $('run-pipelines').disabled = runner.running;
+
+      const rows = runner.results || [];
+      $('results-body').innerHTML = rows.length ? rows.map(item => {
+        const statusClass = item.status === 'failed' ? 'result-bad' : (item.failed > 0 ? 'result-warn' : 'result-ok');
+        return `
+          <tr title="${escapeAttr(item.error || item.resultDir || '')}">
+            <td>${escapeHtml(item.name || '-')}<div class="muted">${escapeHtml(item.resultDir || '')}</div></td>
+            <td class="${statusClass}">${escapeHtml(item.status || '-')}</td>
+            <td>${item.processed ?? 0}</td>
+            <td>${item.failed ?? 0}</td>
+          </tr>
+        `;
+      }).join('') : '<tr><td colspan="4" class="muted">No run yet.</td></tr>';
+      $('log-box').textContent = (runner.log && runner.log.length) ? runner.log.join('\n') : 'Idle';
+      $('log-box').scrollTop = $('log-box').scrollHeight;
+    }
+
+    async function saveList() {
+      collectConfig();
+      const data = await api('/api/save', { method: 'POST', body: JSON.stringify(config) });
+      config = data.config;
+      renderPipelines();
+    }
+
+    async function probeModels(role, index) {
+      collectConfig();
+      const pipeline = config.pipelines[index];
+      const provider = role === 'ocr' ? pipeline.ocrProvider : pipeline.llmProvider;
+      if (!modelProviders.has(provider)) return;
+      showError('');
+      try {
+        const buttonText = `${role.toUpperCase()} ${provider}`;
+        const data = await api('/api/probe', {
+          method: 'POST',
+          body: JSON.stringify({ backendUrl: config.backendUrl, role, provider })
+        });
+        const models = (data.models || []).map(m => m.id || m.name || '').filter(Boolean);
+        config.modelOptions[role][provider] = models;
+        await saveList();
+        if (!models.length) showError(`Probe completed for ${buttonText}, but no models were returned.`);
+      } catch (error) {
+        showError(error.message);
+      }
+    }
+
+    async function runPipelines() {
+      collectConfig();
+      showError('');
+      try {
+        const data = await api('/api/run', { method: 'POST', body: JSON.stringify(config) });
+        runner = data.runner;
+        renderRunner();
+        startPolling();
+      } catch (error) {
+        showError(error.message);
+      }
+    }
+
+    async function stopRunner() {
+      try {
+        const data = await api('/api/stop', {
+          method: 'POST',
+          body: JSON.stringify({ backendUrl: $('backend-url').value.trim() || 'http://localhost:8000' })
+        });
+        runner = data.runner;
+        renderRunner();
+      } catch (error) {
+        showError(error.message);
+      }
+    }
+
+    function startPolling() {
+      if (pollHandle) clearInterval(pollHandle);
+      pollHandle = setInterval(async () => {
+        try {
+          const data = await api('/api/state');
+          runner = data.runner;
+          renderRunner();
+          if (!runner.running) clearInterval(pollHandle);
+        } catch (error) {
+          showError(error.message);
+        }
+      }, 2000);
+    }
+
+    $('add-pipeline').addEventListener('click', () => {
+      config.pipelines.push(pipelineDefault());
+      renderPipelines();
+    });
+    $('save-list').addEventListener('click', () => saveList().catch(error => showError(error.message)));
+    $('run-pipelines').addEventListener('click', runPipelines);
+    $('stop-runner').addEventListener('click', stopRunner);
+    $('refresh-settings').addEventListener('click', refreshSettings);
+    $('backend-url').addEventListener('change', () => {
+      collectConfig();
+      refreshSettings();
+    });
+
+    loadState().then(startPolling).catch(error => showError(error.message));
+  </script>
+</body>
+</html>
