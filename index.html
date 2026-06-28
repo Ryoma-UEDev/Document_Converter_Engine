@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pipeline &amp; Test Report</title>
+<meta name="description" content="Testing the best LLM and VLM combinations for document data extraction.">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  :root{
+    --bg:#f3f4f6;
+    --card:#ffffff;
+    --border:#e5e7eb;
+    --ink:#111827;
+    --ink-soft:#4b5563;
+    --ink-faint:#6b7280;
+    --ink-mute:#9ca3af;
+    --accent:#111827;
+    --blue:#3b82f6;
+    --blue-soft:#eff6ff;
+    --green:#15803d;
+    --green-soft:#dcfce7;
+    --yellow:#a16207;
+    --yellow-soft:#fef9c3;
+    --red:#b91c1c;
+    --red-soft:#fee2e2;
+    --purple:#7c3aed;
+    --purple-soft:#f3e8ff;
+    --radius:8px;
+    --shadow:0 1px 3px rgba(0,0,0,0.05);
+    --max:1320px;
+  }
+
+  *{ box-sizing:border-box; }
+
+  body{
+    margin:0;
+    font-family:ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size:13px;
+    line-height:1.6;
+    color:var(--ink);
+    background-color:var(--bg);
+  }
+
+  .wrap{ max-width:var(--max); margin:0 auto; padding:40px 20px 80px; }
+
+  /* ---------- Header ---------- */
+  .dashboard-header{ margin-bottom:24px; }
+  .eyebrow{
+    font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.08em;
+    color:var(--ink-faint); margin:0 0 6px;
+  }
+  .dashboard-title{
+    font-size:24px; font-weight:700; color:var(--ink); margin:0 0 4px;
+    letter-spacing:-0.01em;
+  }
+  .dashboard-sub{ font-size:13px; color:var(--ink-faint); margin:0 0 20px; }
+
+  /* ---------- Tab bar ---------- */
+  .tab-bar{
+    display:flex; gap:6px; flex-wrap:wrap;
+    border-bottom:1px solid var(--border);
+    padding-bottom:12px;
+  }
+  .tab-btn{
+    background:none; border:none; padding:8px 16px;
+    font-size:13px; font-weight:600; color:var(--ink-faint);
+    cursor:pointer; border-radius:6px;
+    transition:background-color .15s ease, color .15s ease;
+    font-family:inherit;
+    display:flex; align-items:center; gap:7px;
+  }
+  .tab-btn .dot{
+    width:6px; height:6px; border-radius:50%; background:var(--ink-mute); flex-shrink:0;
+  }
+  .tab-btn:hover{ background-color:var(--border); color:var(--ink); }
+  .tab-btn.active{ background-color:var(--accent); color:#fff; }
+  .tab-btn.active .dot{ background:#fff; }
+
+  /* ---------- Sub tab bar (inside benchmarks) ---------- */
+  .subtab-bar{
+    display:flex; gap:6px; margin-bottom:18px;
+  }
+  .subtab-btn{
+    background:var(--bg); border:1px solid var(--border); padding:6px 14px;
+    font-size:12.5px; font-weight:600; color:var(--ink-soft);
+    cursor:pointer; border-radius:6px; font-family:inherit;
+    transition:background-color .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .subtab-btn:hover{ border-color:var(--ink-mute); }
+  .subtab-btn.active{ background:var(--blue-soft); color:var(--blue); border-color:#bfdbfe; }
+
+  /* ---------- Card ---------- */
+  .card{
+    background-color:var(--card);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:24px;
+  }
+  .card + .card{ margin-top:20px; }
+
+  .tab-content{ display:none; }
+  .tab-content.active{ display:block; }
+  .subtab-content{ display:none; }
+  .subtab-content.active{ display:block; }
+
+  h2.section-title{
+    font-size:16px; font-weight:700; margin:0 0 4px; color:var(--ink);
+  }
+  p.section-desc{
+    font-size:12.5px; color:var(--ink-faint); margin:0 0 18px; max-width:70ch;
+  }
+
+  /* ---------- Stat row ---------- */
+  .stat-row{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:14px;
+    margin-bottom:20px;
+  }
+  .stat-box{
+    background:var(--bg); border:1px solid var(--border); border-radius:var(--radius);
+    padding:14px 16px;
+  }
+  .stat-box .num{ font-size:22px; font-weight:700; color:var(--ink); line-height:1.1; }
+  .stat-box .num.accent{ color:var(--green); }
+  .stat-box .lbl{ font-size:11px; color:var(--ink-faint); margin-top:4px; text-transform:uppercase; letter-spacing:.04em; }
+
+  @media (max-width:760px){ .stat-row{ grid-template-columns:1fr 1fr; } }
+
+  /* ---------- Tables ---------- */
+  table{ width:100%; border-collapse:collapse; text-align:left; }
+  th, td{ padding:12px 16px; border-bottom:1px solid var(--border); }
+  th{
+    background-color:#f9fafb; color:var(--ink-soft); font-size:11px;
+    text-transform:uppercase; font-weight:600; letter-spacing:.05em;
+  }
+  td{ font-size:13px; }
+  .pipeline-name{
+    font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size:11px; font-weight:600; color:var(--ink);
+  }
+  .group-divider{ border-top:2px dashed #d1d5db; }
+  .not-in-report{ color:var(--ink-mute); font-style:italic; }
+  .score-badge{ font-weight:700; padding:2px 6px; border-radius:4px; display:inline-block; }
+  .bg-green{ background-color:var(--green-soft); color:var(--green); }
+  .bg-yellow{ background-color:var(--yellow-soft); color:var(--yellow); }
+  .bg-red{ background-color:var(--red-soft); color:var(--red); }
+  .missing-txt{ font-size:11px; color:var(--ink-faint); margin-top:2px; }
+  .missing-warning{ color:var(--red); font-weight:600; }
+  .legend-row{ display:flex; gap:18px; align-items:center; flex-wrap:wrap; font-size:12px; color:var(--ink-faint); margin-top:14px; }
+
+  /* ---------- Chart ---------- */
+  .chart-container{ position:relative; height:600px; width:100%; }
+
+  /* ---------- Pills ---------- */
+  .pill{
+    display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700;
+    padding:3px 9px; border-radius:99px; text-transform:uppercase; letter-spacing:.03em;
+  }
+  .pill-green{ background:var(--green-soft); color:var(--green); }
+  .pill-blue{ background:var(--blue-soft); color:var(--blue); }
+  .pill-purple{ background:var(--purple-soft); color:var(--purple); }
+  .pill-neutral{ background:var(--bg); color:var(--ink-faint); border:1px solid var(--border); }
+
+  /* ---------- Plan checklist ---------- */
+  .plan-grid{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media (max-width:760px){ .plan-grid{ grid-template-columns:1fr; } }
+  .plan-col h3{ font-size:13px; font-weight:700; margin:0 0 12px; display:flex; align-items:center; gap:8px; }
+  .plan-list{ list-style:none; margin:0; padding:0; }
+  .plan-list li{
+    display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); font-size:13px;
+  }
+  .plan-list li:last-child{ border-bottom:none; }
+  .check{
+    flex-shrink:0; width:18px; height:18px; margin-top:1px; border-radius:50%;
+    display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:700;
+  }
+  .check.done{ background:var(--green); color:#fff; }
+  .check.open{ border:1.5px solid var(--ink-mute); color:transparent; }
+
+  .callout{
+    border-left:3px solid var(--blue); background:var(--blue-soft);
+    border-radius:0 6px 6px 0; padding:14px 18px; font-size:13px; color:var(--ink);
+    margin:18px 0;
+  }
+  .callout.green{ border-left-color:var(--green); background:var(--green-soft); }
+  .callout.purple{ border-left-color:var(--purple); background:var(--purple-soft); }
+  .callout strong{ font-weight:700; }
+
+  /* ---------- Test cases ---------- */
+  .test-group{ margin-bottom:28px; }
+  .test-group:last-child{ margin-bottom:0; }
+  .test-group-title{
+    display:flex; align-items:center; gap:10px; font-size:12px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); margin-bottom:12px;
+  }
+  .case{
+    border:1px solid var(--border); border-radius:var(--radius); margin-bottom:10px; overflow:hidden;
+  }
+  .case-head{
+    display:flex; align-items:center; gap:12px; padding:12px 16px; background:#fafafa;
+    border-bottom:1px solid var(--border);
+  }
+  .case-id{ font-family:ui-monospace, monospace; font-size:11px; font-weight:700; color:var(--blue); flex-shrink:0; }
+  .case-name{ font-weight:600; font-size:13px; flex:1; }
+  .case-body{ display:grid; grid-template-columns:1.1fr 1fr; }
+  .case-body .steps{ padding:14px 16px; border-right:1px solid var(--border); }
+  .case-body .expect{ padding:14px 16px; }
+  .case h4{
+    margin:0 0 8px; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--ink-faint); font-weight:700;
+  }
+  .case ol, .case ul{ margin:0; padding-left:18px; }
+  .case li{ margin:3px 0; font-size:12.5px; }
+  .case code{
+    background:#f3f4f6; border:1px solid var(--border); border-radius:4px; padding:1px 5px; font-size:11.5px;
+    font-family:ui-monospace, monospace;
+  }
+  .case-foot{ padding:8px 16px; font-size:11px; color:var(--ink-faint); border-top:1px solid var(--border); background:#fafafa; }
+
+  @media (max-width:720px){
+    .case-body{ grid-template-columns:1fr; }
+    .case-body .steps{ border-right:none; border-bottom:1px solid var(--border); }
+  }
+
+  /* ---------- OCR comparison ---------- */
+  .ocr-compare{ display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:18px; }
+  @media (max-width:760px){ .ocr-compare{ grid-template-columns:1fr; } }
+  .ocr-box{ border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px; }
+  .ocr-box h3{ font-size:13.5px; margin:0 0 4px; display:flex; align-items:center; gap:8px; }
+  .ocr-box .strength{ font-size:11.5px; color:var(--green); font-weight:600; margin-bottom:10px; }
+  .ocr-box .weakness{ font-size:11.5px; color:var(--red); font-weight:600; margin-top:10px; margin-bottom:2px; }
+  .ocr-box ul{ margin:6px 0 0; padding-left:18px; font-size:12.5px; color:var(--ink-soft); }
+  .ocr-box li{ margin:4px 0; }
+
+  .example-tag{
+    display:inline-block; font-family:ui-monospace, monospace; font-size:11px;
+    background:#fafafa; border:1px solid var(--border); border-radius:4px; padding:6px 10px; color:var(--ink-soft);
+  }
+
+  /* ---------- Conclusion ---------- */
+  .summary-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:6px; }
+  @media (max-width:880px){ .summary-grid{ grid-template-columns:1fr; } }
+  .summary-card{ border:1px solid var(--border); border-radius:var(--radius); padding:18px; }
+  .summary-card h3{ font-size:13px; margin:0 0 10px; }
+  .summary-card ul{ margin:0; padding-left:18px; font-size:12.5px; color:var(--ink-soft); }
+  .summary-card li{ margin:6px 0; }
+
+  footer{
+    text-align:center; font-size:11.5px; color:var(--ink-mute); margin-top:36px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="dashboard-header">
+    <h1 class="dashboard-title">Pipeline &amp; Test Report</h1>
+    <p class="dashboard-sub">Testing the best LLM/VLM combinations for document data extraction.</p>
+
+    <div class="tab-bar" id="tabBar">
+      <button class="tab-btn active" data-target="tab-plan"><span class="dot"></span>Test Plan</button>
+      <button class="tab-btn" data-target="tab-benchmarks"><span class="dot"></span>Benchmarks</button>
+      <button class="tab-btn" data-target="tab-tests"><span class="dot"></span>Tests</button>
+      <button class="tab-btn" data-target="tab-ocr"><span class="dot"></span>OCR Comparison</button>
+      <button class="tab-btn" data-target="tab-conclusion"><span class="dot"></span>Conclusion</button>
+    </div>
+  </div>
+
+  <!-- ============ TAB 1: TEST PLAN ============ -->
+  <div id="tab-plan" class="tab-content active">
+    <div class="card">
+      <h2 class="section-title">Test Plan</h2>
+      <p class="section-desc">The main focus of testing on this project is document conversion accuracy across different OCR/LLM pipelines. API and UI testing cover the surrounding application.</p>
+
+      <h3 style="font-size:13px; margin:24px 0 8px;">Scope</h3>
+      <p style="font-size:13px; color:var(--ink-soft); margin:0 0 4px;">In scope: extraction accuracy across OCR/LLM pipeline combinations, the document-job API surface, and core UI flows (settings, language, schema, providers).</p>
+      <p style="font-size:13px; color:var(--ink-soft); margin:0;">Out of scope for this round: load/performance testing, security testing, and batch-folder regression testing.</p>
+
+      <h3 style="font-size:13px; margin:24px 0 8px;">Approach</h3>
+      <p style="font-size:13px; color:var(--ink-soft); margin:0;">Pipeline accuracy is benchmarked by running each OCR/LLM combination against the same hand-labeled invoice set and scoring field-level output. The API surface is checked with direct HTTP requests against a running backend. UI flows are covered with Playwright, split into standalone specs (mocked, fast, no live provider) and integration specs (real provider, real document, opt-in with <code>RUN_INTEGRATION=true</code>).</p>
+
+      <h3 style="font-size:13px; margin:24px 0 8px;">Environment &amp; tools</h3>
+      <p style="font-size:13px; color:var(--ink-soft); margin:0;">Local LM Studio models and the GLM 5.2 cloud API as extraction backends; Google Vision API and a local Qwen3-VL model as OCR options; Playwright for browser automation; direct HTTP calls for API checks; a hand-labeled set of invoices as ground truth for scoring.</p>
+
+      <h3 style="font-size:13px; margin:24px 0 8px;">Exit criteria</h3>
+      <p style="font-size:13px; color:var(--ink-soft); margin:0;">A pipeline combination is considered viable once it clears 85% field-level accuracy with zero missing documents on the test set. API and UI specs must pass with zero known failures before being counted as covered.</p>
+    </div>
+  </div>
+
+  <!-- ============ TAB 2: PIPELINE BENCHMARKS ============ -->
+  <div id="tab-benchmarks" class="tab-content">
+    <div class="card">
+      <h2 class="section-title">Benchmarks</h2>
+      <p class="section-desc">Six extraction models, three OCR strategies, run against the same set of 14 Estonian/Russian invoices.</p>
+
+      <div class="stat-row">
+        <div class="stat-box"><div class="num accent">94%</div><div class="lbl">Best single-run score</div></div>
+        <div class="stat-box"><div class="num">16</div><div class="lbl">Pipeline / run combos</div></div>
+        <div class="stat-box"><div class="num">6</div><div class="lbl">Runs recorded</div></div>
+        <div class="stat-box"><div class="num">2</div><div class="lbl">Runs with missing docs</div></div>
+      </div>
+
+      <div class="subtab-bar" id="benchSubtabBar">
+        <button class="subtab-btn active" data-sub="sub-matrix">Matrix Data</button>
+        <button class="subtab-btn" data-sub="sub-chart">Performance Graph</button>
+      </div>
+
+      <div id="sub-matrix" class="subtab-content active">
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th style="min-width:320px;">Pipeline</th>
+                <th>Run1</th><th>Run2</th><th>Run3</th><th>Run4</th><th>Run5</th><th>Run6</th>
+              </tr>
+            </thead>
+            <tbody id="matrixBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="sub-chart" class="subtab-content">
+        <div class="chart-container">
+          <canvas id="benchmarkChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TAB 3: TESTS ============ -->
+  <div id="tab-tests" class="tab-content">
+    <div class="card">
+      <h2 class="section-title">Tests</h2>
+      <p class="section-desc">Automated coverage across the live FastAPI backend and Vue frontend — Playwright for UI flows, direct HTTP checks for the API surface. Every case below ran clean on the current build.</p>
+
+      <div class="test-group">
+        <div class="test-group-title">Postman</div>
+
+        <article class="case">
+          <div class="case-head">
+            <span class="case-id">API-001…005</span>
+            <span class="case-name">Core read-only endpoints respond with the expected shape</span>
+            <span class="pill pill-green">Passed</span>
+          </div>
+          <div class="case-body">
+            <div class="steps">
+              <h4>Endpoints checked</h4>
+              <ul>
+                <li><code>GET /api/health</code> → <code>status: "ok"</code></li>
+                <li><code>GET /api/bootstrap</code> → backend URL + effective settings</li>
+                <li><code>GET /api/settings/default</code> → schema + batch config present</li>
+                <li><code>GET /api/jobs</code> → array response</li>
+                <li><code>GET /api/batch/status</code> → <code>running</code> property present</li>
+              </ul>
+            </div>
+            <div class="expect">
+              <h4>Expected result</h4>
+              <ul>
+                <li>All five endpoints return <code>200</code>.</li>
+                <li>Response shapes match what the frontend depends on at startup.</li>
+                <li>No model provider is called by any of these checks.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="case-foot">Source: <code>api-smoke.spec.js</code></div>
+        </article>
+
+        <article class="case">
+          <div class="case-head">
+            <span class="case-id">API-008</span>
+            <span class="case-name">CustomDB prompt preview injects the active schema</span>
+            <span class="pill pill-green">Passed</span>
+          </div>
+          <div class="case-body">
+            <div class="steps">
+              <h4>Steps</h4>
+              <ol>
+                <li><code>POST /api/prompt/preview</code> with <code>{"mode":"customdb","settings":{}}</code>.</li>
+              </ol>
+            </div>
+            <div class="expect">
+              <h4>Expected result</h4>
+              <ul>
+                <li>Response is <code>200</code> with a string <code>prompt</code> field.</li>
+                <li>Prompt text contains rendered schema injection text: <code>JSON schema exactly like this</code>.</li>
+                <li>Response includes a <code>warnings</code> array.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="case-foot">Source: <code>api-smoke.spec.js</code> · rendering only, no document submitted</div>
+        </article>
+      </div>
+
+      <div class="test-group">
+        <div class="test-group-title">Playwright — Standalone UI Specs</div>
+
+        <article class="case">
+          <div class="case-head">
+            <span class="case-id">PW-ST-001</span>
+            <span class="case-name">App loads and the settings dialog opens cleanly</span>
+            <span class="pill pill-green">Passed</span>
+          </div>
+          <div class="case-body">
+            <div class="steps">
+              <h4>Steps</h4>
+              <ol>
+                <li>Force English UI via <code>localStorage.ui_lang</code>.</li>
+                <li>Load <code>/</code> and listen for console / page errors.</li>
+                <li>Click the settings button (aria-label "configure AI").</li>
+              </ol>
+            </div>
+            <div class="expect">
+              <h4>Expected result</h4>
+              <ul>
+                <li>Page title matches the app name.</li>
+                <li>Body text shows app/feature copy (CustomDB, XML, Batch).</li>
+                <li>Settings modal exposes AI / OCR / Prompt / CustomDB text.</li>
+                <li>Zero console errors during load and interaction.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="case-foot">Source: <code>standalone/ui-smoke.spec.js</code></div>
+        </article>
+
+        <article class="case">
+          <div class="case-head">
+            <span class="case-id">PW-ST-002</span>
+            <span class="case-name">Language switch updates visible UI text</span>
+            <span class="pill pill-green">Passed</span>
+          </div>
+          <div class="case-body">
+            <div class="steps">
+              <h4>Steps</h4>
+              <ol>
+                <li>Load the app in English.</li>
+                <li>Click <code>ET</code>, then <code>RU</code>, then <code>EN</code>.</li>
+              </ol>
+            </div>
+            <div class="expect">
+              <h4>Expected result</h4>
+              <ul>
+                <li>Heading text switches to Estonian after <code>ET</code>.</li>
+                <li>Heading text switches to Russian after <code>RU</code>.</li>
+                <li>Heading returns to English after <code>EN</code>.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="case-foot">Source: <code>standalone/language-switch.spec.js</code></div>
+        </article>
+
+        <article class="case">
+          <div class="case-head">
+            <span class="case-id">PW-ST-003</span>
+            <span class="case-name">Settings save sends a backend request and confirms success</span>
+            <span class="pill pill-green">Passed</span>
+          </div>
+          <div class="case-body">
+            <div class="steps">
+              <h4>Steps</h4>
+              <ol>
+                <li>Intercept <code>/api/settings/save</code> with a mocked response.</li>
+                <li>Open settings, click <strong>Save</strong>, confirm the override prompt.</li>
+              </ol>
+            </div>
+            <div class="expect">
+              <h4>Expected result</h4>
+              <ul>
+                <li>"Override the backend settings" confirmation is shown before saving.</li>
+                <li>"Backend settings saved" confirmation appears after override.</li>
+                <li>Payload includes <code>settings.provider</code>.</li>
+                <li>Payload omits UI-only fields like <code>filterDuplicates</code>.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="case-foot">Source: <code>standalone/settings-save.spec.js</code> · real settings file never touched</div>
+        </article>
+
+        <article class="case">
+          <div class="case-head">
+            <span class="case-id">PW-ST-004</span>
+            <span class="case-name">CustomDB schema injection updates and restores the prompt preview</span>
+            <span class="pill pill-green">Passed</span>
+          </div>
+          <div class="case-body">
+            <div class="steps">
+              <h4>Steps</h4>
+              <ol>
+                <li>Open settings → CustomDB setup tab.</li>
+                <li>Prepend a marker string to the base prompt, click <strong>Apply Schema</strong>.</li>
+                <li>Remove the marker, apply schema injection again.</li>
+              </ol>
+            </div>
+            <div class="expect">
+              <h4>Expected result</h4>
+              <ul>
+                <li>Injected preview textarea contains the marker after the first apply.</li>
+                <li>Marker disappears from the preview once removed and re-applied.</li>
+                <li>Base prompt is fully restorable with no residual test text.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="case-foot">Source: <code>standalone/prompt-schema-inject.spec.js</code></div>
+        </article>
+
+        <article class="case">
+          <div class="case-head">
+            <span class="case-id">PW-ST-005</span>
+            <span class="case-name">Provider probe fills the model list through the UI</span>
+            <span class="pill pill-green">Passed</span>
+          </div>
+          <div class="case-body">
+            <div class="steps">
+              <h4>Steps</h4>
+              <ol>
+                <li>Open settings and switch through provider options.</li>
+                <li>Click <strong>Probe</strong> for the first available provider.</li>
+              </ol>
+            </div>
+            <div class="expect">
+              <h4>Expected result</h4>
+              <ul>
+                <li>At least one configured provider returns a model list in the UI.</li>
+                <li>The model picker receives at least one selectable model.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="case-foot">Source: <code>integration/provider-probe.spec.js</code> · skipped when <code>RUN_INTEGRATION</code> is not enabled; fails if enabled and no provider fills the model list</div>
+        </article>
+      </div>
+
+      <div class="test-group">
+        <div class="test-group-title">Playwright — Integration (Live Provider) Specs</div>
+
+        <article class="case">
+          <div class="case-head">
+            <span class="case-id">PW-INT-001</span>
+            <span class="case-name">Provider probe against a real, running provider</span>
+            <span class="pill pill-green">Passed</span>
+          </div>
+          <div class="case-body">
+            <div class="steps">
+              <h4>Steps</h4>
+              <ol>
+                <li>Run with <code>RUN_INTEGRATION=true</code> against a live LM Studio / cloud endpoint.</li>
+                <li>Open settings, probe the first reachable provider, confirm it fills the model picker.</li>
+              </ol>
+            </div>
+            <div class="expect">
+              <h4>Expected result</h4>
+              <ul>
+                <li>Test is skipped when <code>RUN_INTEGRATION</code> is not enabled.</li>
+                <li>When enabled, at least one live provider fills the model picker.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="case-foot">Source: <code>integration/provider-probe.spec.js</code></div>
+        </article>
+
+        <article class="case">
+          <div class="case-head">
+            <span class="case-id">PW-INT-002</span>
+            <span class="case-name">Full document job: upload → extract → CustomDB result</span>
+            <span class="pill pill-green">Passed</span>
+          </div>
+          <div class="case-body">
+            <div class="steps">
+              <h4>Steps</h4>
+              <ol>
+                <li>Open settings, disable OCR in the UI, pick the first available provider.</li>
+                <li>Switch to the CustomDB tab and upload a real test PDF.</li>
+                <li>Click <strong>Extract Data</strong> and capture the job ID from <code>POST /api/jobs</code>.</li>
+                <li>Poll the current-job panel until it reports Completed or Failed.</li>
+              </ol>
+            </div>
+            <div class="expect">
+              <h4>Expected result</h4>
+              <ul>
+                <li><code>POST /api/jobs</code> responds <code>200</code> with a non-empty <code>job_id</code>.</li>
+                <li>The current-job panel reaches <em>Completed (100%)</em> within the configured timeout.</li>
+                <li>UI-only settings are sent with the job request and never written to disk.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="case-foot">Source: <code>integration/document-job.spec.js</code> · requires <code>RUN_INTEGRATION=true</code> and a readable <code>TEST_DOCUMENT</code></div>
+        </article>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TAB 4: OCR COMPARISON ============ -->
+  <div id="tab-ocr" class="tab-content">
+    <div class="card">
+      <h2 class="section-title">OCR Comparison: Google Vision vs. Local VLM</h2>
+      <p class="section-desc">The two OCR strategies tested fail in complementary, opposite ways — one gets the characters right but misplaces lines, the other keeps structure intact but introduces small character errors.</p>
+
+      <div class="ocr-compare">
+        <div class="ocr-box">
+          <h3><span class="pill pill-blue">Google Vision</span></h3>
+          <div class="strength">✓ Near-perfect character accuracy</div>
+          <ul>
+            <li>Best raw text recognition of the OCR engines tested — individual characters and words come through cleanly.</li>
+            <li>Strong on dense, well-printed source documents.</li>
+          </ul>
+          <div class="weakness">✕ Unreliable spatial reconstruction</div>
+          <ul>
+            <li>Stray lines can land in the wrong position in the reconstructed text — a line from the header block can surface in the middle of an item list, or vice versa.</li>
+            <li>Three reconstruction modes were tried, covered below — none fully solved it. Plain paragraph mode ended up the best trade-off.</li>
+          </ul>
+        </div>
+
+        <div class="ocr-box">
+          <h3><span class="pill pill-purple">Local VLM (Qwen3-VL)</span></h3>
+          <div class="strength">✓ Preserves document structure</div>
+          <ul>
+            <li>Line order and grouping stay much closer to the original layout — item rows, header blocks, and totals stay where they belong.</li>
+            <li>Produces output the LLM can parse more predictably, with no need for coordinate metadata.</li>
+          </ul>
+          <div class="weakness">✕ Character-level noise</div>
+          <ul>
+            <li>Introduces roughly 1–3 small errors per run — typically duplicated letters or stray spaces.</li>
+            <li>The 30B variant was also tested against the 8B model specifically to see if more parameters reduced this noise — the difference was minimal. Both sizes produce similar text errors, in either direction.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h2 class="section-title" style="margin-top:28px;">Google Vision reconstruction modes tried</h2>
+      <ul class="plan-list" style="max-width:760px;">
+        <li><span class="check open"></span><strong>Paragraph mode</strong> — the best of the three. Some column bleeding still occurs, but the document stays mostly usable for the LLM.</li>
+        <li><span class="check open"></span><strong>Plain/flat text mode</strong> — same line-placement issue as paragraph mode, no real improvement.</li>
+        <li><span class="check open"></span><strong>Y-block / single-line-per-row mode</strong> — reconstructed each row as one long line spanning the full page width. This did fix the stray-line problem, but introduced a worse one: words split across two source rows would lose their context entirely, and a single reconstructed line could end up containing two unrelated addresses merged together. This was the worst result of the three and was never committed to the pipeline.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ============ TAB 5: CONCLUSION ============ -->
+  <div id="tab-conclusion" class="tab-content">
+    <div class="card">
+      <h2 class="section-title">Conclusion &amp; Summary</h2>
+      <p class="section-desc">Where the project stands after benchmarking six models across three OCR strategies.</p>
+
+      <p style="font-size:13px; color:var(--ink-soft); margin:0 0 14px;">
+        On the OCR side, Google Vision and the local VLM fail in complementary ways: Google Vision has near-perfect character accuracy but unreliable spatial reconstruction, while the local VLM preserves document structure well but introduces small character-level errors. Paragraph-mode Google Vision ended up the best practical balance after testing flat text and a Y-block single-line reconstruction, the latter of which fixed stray lines but caused worse problems — split words losing context and unrelated addresses merging onto one line.
+      </p>
+
+      <p style="font-size:13px; color:var(--ink-soft); margin:0 0 14px;">
+        Across the pipeline combinations tested, the same pattern holds at the model level: Google Vision feeding an LLM is generally stronger on raw accuracy, while VLM-based OCR and single-stage (no-OCR) vision pipelines are generally stronger on structure — keeping item rows, header fields, and totals correctly grouped. Neither approach dominates outright; the best results came from pairing local VLM OCR with a strong cloud model (GLM 5.2), suggesting the cleaner structure from local OCR matters more to final accuracy than the small character noise it introduces.
+      </p>
+
+      <p style="font-size:13px; color:var(--ink-soft); margin:0 0 14px;">
+        Schema complexity turned out to matter more than expected. Simpler schemas consistently performed better — fields that can be calculated from other already-extracted fields (totals, sums, derived amounts) should be computed after extraction rather than asked of the model directly, since asking for them adds room for error without adding real information. This connects to a broader attention issue seen early in testing: asking a single VLM to both read a dense, multi-section document and produce well-formed JSON in one pass is a harder task than splitting OCR and extraction into two stages, which is part of why two-stage pipelines tend to be more reliable than asking one vision model to do both jobs at once.
+      </p>
+
+      <p style="font-size:13px; color:var(--ink-soft); margin:0;">
+        The clearest next step is a validation layer rather than a model change — checking extracted addresses against an address database and extracted company names against a company registry, the same way the existing counterparty table could be used for fuzzy matching. Item-level extraction is already in good shape: item counts and line-item accuracy are usually reliable, so validation effort is better spent on the header-level fields (seller, address) where OCR-driven errors actually concentrate.
+      </p>
+    </div>
+  </div>
+
+  <footer></footer>
+</div>
+
+<script>
+  // ---------- Top-level tab switching ----------
+  document.getElementById('tabBar').addEventListener('click', (e) => {
+    const btn = e.target.closest('.tab-btn');
+    if(!btn) return;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.target).classList.add('active');
+    if(btn.dataset.target === 'tab-benchmarks'){ renderChart(); }
+  });
+
+  // ---------- Sub tab switching (benchmarks) ----------
+  document.getElementById('benchSubtabBar').addEventListener('click', (e) => {
+    const btn = e.target.closest('.subtab-btn');
+    if(!btn) return;
+    document.querySelectorAll('.subtab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.subtab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.sub).classList.add('active');
+    if(btn.dataset.sub === 'sub-chart'){ renderChart(); }
+  });
+
+  // ---------- Benchmark matrix data (verified against source, 16/16 rows match) ----------
+  const PIPELINES = [
+    { rows: [
+      { name: 'OCR_GoogleVision_LLM_gemma-4-31b-it-qat', scores: [76, 78, null, null, null, null], missing: [0,0,null,null,null,null] },
+      { name: 'OCR_None_LLM_gemma-4-31b-it-qat', scores: [null, null, null, null, null, 92], missing: [null,null,null,null,null,0] },
+      { name: 'OCR_qwen_qwen3-vl-8b_LLM_gemma-4-31b-it-qat', scores: [null, null, null, 86, 92, null], missing: [null,null,null,1,0,null] }
+    ]},
+    { rows: [
+      { name: 'OCR_GoogleVision_LLM_gemma-4-31b-it-qat-heretic', scores: [82, 78, null, null, null, null], missing: [0,0,null,null,null,null] },
+      { name: 'OCR_None_LLM_gemma-4-31b-it-qat-heretic', scores: [null, null, null, null, null, 91], missing: [null,null,null,null,null,0] },
+      { name: 'OCR_qwen_qwen3-vl-8b_LLM_gemma-4-31b-it-qat-heretic', scores: [null, null, null, 91, 92, null], missing: [null,null,null,0,0,null] }
+    ]},
+    { rows: [
+      { name: 'OCR_GoogleVision_LLM_glm-5.2', scores: [88, 83, null, null, null, null], missing: [0,0,null,null,null,null] },
+      { name: 'OCR_qwen_qwen3-vl-8b_LLM_glm-5.2', scores: [null, null, null, 94, 93, null], missing: [null,null,null,0,0,null] }
+    ]},
+    { rows: [
+      { name: 'OCR_GoogleVision_LLM_gemma-4-26b-a4b-it-heretic-guff', scores: [79, 80, null, null, null, null], missing: [0,0,null,null,null,null] },
+      { name: 'OCR_qwen_qwen3-vl-8b_LLM_gemma-4-26b-a4b-it-heretic-guff', scores: [null, null, null, 89, 89, null], missing: [null,null,null,0,0,null] }
+    ]},
+    { rows: [
+      { name: 'OCR_GoogleVision_LLM_qwen3-vl-30b-a3b-instruct', scores: [73, 73, 70, null, null, null], missing: [0,0,0,null,null,null] },
+      { name: 'OCR_None_LLM_qwen3-vl-30b-a3b-instruct', scores: [null, null, null, null, null, 54], missing: [null,null,null,null,null,1] },
+      { name: 'OCR_qwen_qwen3-vl-8b_LLM_qwen3-vl-30b-a3b-instruct', scores: [null, null, null, 76, 79, null], missing: [null,null,null,0,0,null] }
+    ]},
+    { rows: [
+      { name: 'OCR_GoogleVision_LLM_qwen_qwen3-vl-8b', scores: [68, 66, 69, null, null, null], missing: [0,0,0,null,null,null] },
+      { name: 'OCR_None_LLM_qwen_qwen3-vl-8b', scores: [null, null, null, null, null, 64], missing: [null,null,null,null,null,1] },
+      { name: 'OCR_qwen_qwen3-vl-8b_LLM_qwen_qwen3-vl-8b', scores: [null, null, null, 74, 73, null], missing: [null,null,null,0,0,null] }
+    ]}
+  ];
+
+  function badgeClass(s){
+    if(s >= 90) return 'bg-green';
+    if(s >= 70) return 'bg-yellow';
+    return 'bg-red';
+  }
+
+  function buildMatrix(){
+    const tbody = document.getElementById('matrixBody');
+    let html = '';
+    PIPELINES.forEach(group => {
+      group.rows.forEach((row, idx) => {
+        html += `<tr class="${idx === 0 ? 'group-divider' : ''}"><td class="pipeline-name">${row.name}</td>`;
+        row.scores.forEach((s, i) => {
+          if(s === null){
+            html += `<td><span class="not-in-report">N/A</span></td>`;
+          } else {
+            const m = row.missing[i];
+            const warn = m && m > 0 ? 'missing-warning' : '';
+            html += `<td><span class="score-badge ${badgeClass(s)}">${s}%</span><div class="missing-txt ${warn}">Missing: ${m}</div></td>`;
+          }
+        });
+        html += `</tr>`;
+      });
+    });
+    tbody.innerHTML = html;
+  }
+  buildMatrix();
+
+  // ---------- Chart ----------
+  let chartInstance = null;
+  function renderChart(){
+    if(chartInstance) return;
+    const ctx = document.getElementById('benchmarkChart').getContext('2d');
+    const labels = [];
+    const runs = [[],[],[],[],[],[]];
+    PIPELINES.forEach(group => {
+      group.rows.forEach(row => {
+        labels.push(row.name.replace('OCR_','').replace('_LLM_',' | '));
+        row.scores.forEach((s, i) => runs[i].push(s));
+      });
+    });
+    const palette = ['#3b82f6','#60a5fa','#93c5fd','#f59e0b','#fbbf24','#10b981'];
+    chartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: runs.map((data, i) => ({
+          label: `Run ${i+1}`,
+          data,
+          backgroundColor: palette[i]
+        }))
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { beginAtZero:true, max:100, title:{ display:true, text:'Percentage Score (%)' } }
+        },
+        plugins: {
+          legend: { position:'top' },
+          tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.raw}%` } }
+        }
+      }
+    });
+  }
+</script>
+</body>
+</html>

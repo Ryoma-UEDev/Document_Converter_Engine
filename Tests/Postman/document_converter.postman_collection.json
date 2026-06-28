@@ -1,0 +1,288 @@
+{
+  "info": {
+    "_postman_id": "99c3b7d9-1f55-4f29-a0cb-2e722be2d2b1",
+    "name": "Document Converter API Smoke Tests",
+    "description": "Safe smoke tests for the local Document Converter backend. The manual upload request is skipped unless runUploadJob is set to true.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "runUploadJob",
+      "value": "false",
+      "type": "string"
+    },
+    {
+      "key": "sampleFilePath",
+      "value": "C:\\Path\\To\\invoice.pdf",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "health"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "const data = pm.response.json();",
+              "pm.test('backend status is ok', () => pm.expect(data.status).to.eql('ok'));",
+              "pm.test('time is present', () => pm.expect(data.time).to.be.a('string').and.not.empty);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bootstrap",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/bootstrap",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bootstrap"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "const data = pm.response.json();",
+              "pm.test('returns backendUrl', () => pm.expect(data.backendUrl).to.be.a('string').and.not.empty);",
+              "pm.test('returns settings object', () => pm.expect(data.settings).to.be.an('object'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Settings Default",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/settings/default",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "settings", "default"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "const data = pm.response.json();",
+              "pm.test('provider is present', () => pm.expect(data.provider).to.be.a('string'));",
+              "pm.test('CustomDB schema is present', () => pm.expect(data.customDbSchema).to.be.an('object'));",
+              "pm.test('batch settings are present', () => pm.expect(data.batchSettings).to.be.an('object'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Prompt Preview - CustomDB",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"mode\": \"customdb\",\n  \"settings\": {}\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/prompt/preview",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "prompt", "preview"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "const data = pm.response.json();",
+              "pm.test('prompt is returned', () => pm.expect(data.prompt).to.be.a('string').and.not.empty);",
+              "pm.test('schema is injected', () => pm.expect(data.prompt).to.include('JSON schema exactly like this'));",
+              "pm.test('warnings array is returned', () => pm.expect(data.warnings).to.be.an('array'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Jobs List",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/jobs",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "jobs"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('returns an array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Batch Status",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/batch/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "batch", "status"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "const data = pm.response.json();",
+              "pm.test('batch running flag exists', () => pm.expect(data).to.have.property('running'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Manual - Submit document job",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.variables.get('runUploadJob') !== 'true') {",
+              "  console.log('Skipping manual upload request. Set runUploadJob=true and sampleFilePath first.');",
+              "  pm.execution.skipRequest();",
+              "}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "const data = pm.response.json();",
+              "pm.test('job id is returned', () => pm.expect(data.job_id).to.be.a('string').and.not.empty);",
+              "pm.environment.set('jobId', data.job_id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "{{sampleFilePath}}"
+            },
+            {
+              "key": "mode",
+              "value": "customdb",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/jobs",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "jobs"]
+        },
+        "description": "Skipped unless runUploadJob=true. This starts a real conversion job using the current backend settings."
+      }
+    },
+    {
+      "name": "Manual - Get last submitted job",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.variables.get('jobId')) {",
+              "  console.log('Skipping job lookup. No jobId environment value is set.');",
+              "  pm.execution.skipRequest();",
+              "}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "const data = pm.response.json();",
+              "pm.test('job id matches', () => pm.expect(data.id).to.eql(pm.variables.get('jobId')));",
+              "pm.test('job status exists', () => pm.expect(data.status).to.be.a('string'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/jobs/{{jobId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "jobs", "{{jobId}}"]
+        }
+      }
+    }
+  ]
+}

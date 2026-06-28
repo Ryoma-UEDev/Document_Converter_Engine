@@ -40,3 +40,10 @@ Thumbs.db
 .vscode/
 .idea/
 Tools/PipeRunner/pipelines.json
+
+# Test runner output
+Tests/playwright/.npm-cache/
+Tests/playwright/.tmp/
+Tests/playwright/node_modules/
+Tests/playwright/playwright-report/
+Tests/playwright/test-results/
