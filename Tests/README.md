@@ -76,23 +76,6 @@ They are skipped by default unless the required environment values are present. 
 
 The submit request may call OCR/LLM providers depending on your saved settings, so treat it as a real pipeline run.
 
-### Postman CLI / Newman
-
-If you install Newman:
-
-```bat
-npm install -g newman
-newman run Tests\Postman\document_converter.postman_collection.json -e Tests\Postman\local.postman_environment.json --reporters cli,json --reporter-json-export Tests\Postman\newman-results.json
-```
-
-Results appear in the terminal and in:
-
-```text
-Tests/Postman/newman-results.json
-```
-
-That result file is ignored by git.
-
 ## Playwright
 
 Use Playwright when you want browser smoke tests.
