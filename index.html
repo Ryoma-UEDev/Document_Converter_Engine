@@ -652,7 +652,7 @@
       </p>
 
       <p style="font-size:13px; color:var(--ink-soft); margin:0;">
-        The clearest next step is a validation layer rather than a model change — checking extracted addresses against an address database and extracted company names against a company registry, the same way the existing counterparty table could be used for fuzzy matching. Item-level extraction is already in good shape: item counts and line-item accuracy are usually reliable, so validation effort is better spent on the header-level fields (seller, address) where OCR-driven errors actually concentrate.
+        The clearest next step is a validation layer rather than a model change — checking extracted addresses against an address database and extracted company names against a company registry, the same way the existing counterparty table could be used for fuzzy matching. I also plan to integrate the engine as an n8n worker and experiment with reproducing the pipeline inside n8n. Item-level extraction is already in good shape: item counts and line-item accuracy are usually reliable, so validation effort is better spent on the header-level fields (seller, address) where OCR-driven errors actually concentrate.
       </p>
     </div>
   </div>

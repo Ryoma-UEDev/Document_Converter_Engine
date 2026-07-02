@@ -1,6 +1,8 @@
 # Document Converter App
+[![Test Report](https://img.shields.io/badge/📊-View%20Test%20Report-blue)](https://ryoma-uedev.github.io/Document_Converter_Engine/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A local-first document extraction tool with a FastAPI backend and browser workstation, mainly meant to be plugged into an automation workflow. Upload a PDF or image, run OCR and/or a vision-capable LLM, review the structured result, map fields into a target schema, and export JSON.
+A local-first document extraction tool with a FastAPI backend and browser workstation, mainly meant to be plugged into an automation workflow (for example, as an n8n worker). Upload a PDF or image, run OCR and/or a vision-capable LLM, review the structured result, map fields into a target schema, and export JSON.
 
 This public branch is a portfolio version of the project, focused on demonstrating the extraction workflow, provider setup, testing approach, and comparison tests for different extraction pipelines.
 
@@ -39,6 +41,20 @@ Open `http://localhost:8000/`
 
 Local settings are stored in `earve_settings.json`. You can set up and save new settings from the frontend, or copy `earve_settings.example.json` for a quick start.
 
+## Demo / Screenshots
+
+<img src="docs/Images/Frontend.png" alt="Frontend UI — converted document and result pane" width="1000">
+
+*Frontend UI — converted document and result pane.*
+
+<img src="docs/Images/Settings.png" alt="Settings modal — provider and OCR settings" width="520">
+
+*Settings modal — provider and OCR configuration.*
+
+<img src="docs/Images/ReviewBench.png" alt="Result Review Bench — compare source and JSON output" width="700">
+
+*Result Review Bench — side-by-side comparison and quick validation.*
+
 ## Features
 
 - Browser UI served by the backend from `frontend/index.html`.
@@ -52,6 +68,25 @@ Local settings are stored in `earve_settings.json`. You can set up and save new 
 - CustomDB prompt injection using `{{CUSTOMDB_SCHEMA_JSON}}`.
 - Model probing endpoints for OpenAI-compatible APIs, LM Studio, and Ollama.
 - UI language switch between English, Estonian, and Russian.
+
+Tools for testing and viewing/editing results:
+Result Review Bench — Lightweight local UI to view source documents side‑by‑side with extracted JSON for quick manual validation. Start (Windows): Tools\Result_Review_Bench\RRB_Start.bat.
+
+PipeRunner — Repeatable batch runner that executes configured OCR+LLM pipelines over a dataset to produce outputs for benchmarking and comparison. See Tools/PipeRunner for usage.
+
+## Benchmarking & Next steps
+
+Benchmarking shows structure vs. character-accuracy trade-offs across OCR/LLM pipelines; see the [full report](https://ryoma-uedev.github.io/Document_Converter_Engine/). Next: integrate the engine as an n8n worker and experiment with reproducing the pipeline inside n8n.
+
+## Tech Stack
+
+| Component | Technology |
+|-----------|------------|
+| Backend | FastAPI (Python) |
+| Frontend | Vue 3 + Tailwind CSS |
+| OCR | Google Vision API, Qwen3-VL |
+| LLM | OpenAI, Ollama, LM Studio |
+| Testing | Playwright, Postman |
 
 ## Settings
 
