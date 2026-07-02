@@ -1,16 +1,16 @@
 # Document Converter App
-[![Test Report](https://img.shields.io/badge/📊-View%20Test%20Report-blue)](https://ryoma-uedev.github.io/Document_Converter_Engine/)
+[![Test Report](https://img.shields.io/badge/%F0%9F%93%8A-View%20Test%20Report-blue)](https://ryoma-uedev.github.io/Document_Converter_Engine/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A local-first document extraction tool with a FastAPI backend and browser workstation, mainly meant to be plugged into an automation workflow (for example, as an n8n worker). Upload a PDF or image, run OCR and/or a vision-capable LLM, review the structured result, map fields into a target schema, and export JSON.
+A local-first document extraction tool with a FastAPI backend and browser workstation, mainly meant to be plugged into an automation workflow (for example, as an n8n worker). Upload a PDF or image,[...]
 
-This public branch is a portfolio version of the project, focused on demonstrating the extraction workflow, provider setup, testing approach, and comparison tests for different extraction pipelines.
+This public branch is a portfolio version of the project, focused on demonstrating the extraction workflow, provider setup, testing approach, and comparison tests for different extraction pipelines[...]
 
 Test results and pipeline comparison report: **[GitHub Pages Report](https://ryoma-uedev.github.io/Document_Converter_Engine/)**
 
-The backend can run as a document-conversion engine without the bundled frontend. External automation tools can submit files through the API, while the frontend acts as a workstation/admin surface for review, job monitoring, settings, prompts, schemas, and mapping.
+The backend can run as a document-conversion engine without the bundled frontend. External automation tools can submit files through the API, while the frontend acts as a workstation/admin surface[...]
 
-The app works with invoices and other structured documents. The UI supports English, Estonian, and Russian. It has mostly been tested on Windows with LM Studio, so Linux may still have some issues.
+The app works with invoices and other structured documents. The UI supports English, Estonian, and Russian. It has mostly been tested on Windows with LM Studio, so Linux may still have some issues[...]
 
 ## Quick Start
 
@@ -51,9 +51,9 @@ Local settings are stored in `earve_settings.json`. You can set up and save new 
 
 *Settings modal — provider and OCR configuration.*
 
-<img src="docs/Images/ReviewBench.png" alt="Result Review Bench — compare source and JSON output" width="700">
+<img src="docs/Images/ReviewBench.png" alt="Result Review Bench — model list and score results" width="700">
 
-*Result Review Bench — side-by-side comparison and quick validation.*
+*Result Review Bench — test results panel showing evaluated LLMs and their scores.*
 
 ## Features
 
@@ -76,7 +76,7 @@ PipeRunner — Repeatable batch runner that executes configured OCR+LLM pipeline
 
 ## Benchmarking & Next steps
 
-Benchmarking shows structure vs. character-accuracy trade-offs across OCR/LLM pipelines; see the [full report](https://ryoma-uedev.github.io/Document_Converter_Engine/). Next: integrate the engine as an n8n worker and experiment with reproducing the pipeline inside n8n.
+Benchmarking shows structure vs. character-accuracy trade-offs across OCR/LLM pipelines; see the [full report](https://ryoma-uedev.github.io/Document_Converter_Engine/). Next: integrate the engine[...]
 
 ## Tech Stack
 
